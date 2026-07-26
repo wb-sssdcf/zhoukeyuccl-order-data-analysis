@@ -230,11 +230,20 @@
         fileInput.addEventListener('change', (e) => { if (e.target.files.length > 0) handleFiles(e.target.files); });
 
         function handleFiles(files) {
-            fileDataList = [];
             const names = [];
+            let newFileCount = 0;
             
             Array.from(files).forEach(file => {
+                // 检查是否已存在相同文件名的文件（去重）
+                const exists = fileDataList.some(f => f.name === file.name);
+                if (exists) {
+                    console.log(`文件已存在，跳过: ${file.name}`);
+                    return;
+                }
+                
                 names.push(file.name);
+                newFileCount++;
+                
                 const reader = new FileReader();
                 reader.onload = (e) => { 
                     // 根据文件扩展名决定数据格式
@@ -243,27 +252,43 @@
                         try {
                             const decoder = new TextDecoder('GBK');
                             const text = decoder.decode(new Uint8Array(e.target.result));
-                            fileDataList.push({ data: text, type: 'csv' });
+                            fileDataList.push({ name: file.name, data: text, type: 'csv' });
                         } catch (err) {
                             // 如果GBK解码失败，尝试UTF-8
-                            fileDataList.push({ data: e.target.result, type: 'csv' });
+                            fileDataList.push({ name: file.name, data: e.target.result, type: 'csv' });
                         }
                     } else {
                         // Excel文件
-                        fileDataList.push({ data: new Uint8Array(e.target.result), type: 'excel' });
+                        fileDataList.push({ name: file.name, data: new Uint8Array(e.target.result), type: 'excel' });
                     }
-                    if (fileDataList.length === files.length) {
+                    // 更新文件列表显示
+                    updateFileList();
+                    if (fileDataList.length > 0) {
                         analyzeBtn.disabled = false;
                     }
                 };
                 // 所有文件都读取为ArrayBuffer，以便正确处理GBK编码
                 reader.readAsArrayBuffer(file);
             });
-            
+        }
+        
+        function updateFileList() {
+            if (fileDataList.length === 0) {
+                fileList.innerHTML = '';
+                return;
+            }
             fileList.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:8px;">
-                ${names.map(name => `<span style="background:#f0f0f0;padding:4px 12px;border-radius:12px;font-size:13px;">📄 ${name}</span>`).join('')}
-                <span style="color:#667eea;">共 ${files.length} 个文件</span>
+                ${fileDataList.map((f, i) => `<span style="background:#f0f0f0;padding:4px 12px;border-radius:12px;font-size:13px;display:flex;align-items:center;gap:4px;">📄 ${f.name} <button onclick="removeFile(${i})" style="background:none;border:none;cursor:pointer;color:#999;font-size:12px;">&times;</button></span>`).join('')}
+                <span style="color:#667eea;">共 ${fileDataList.length} 个文件</span>
             </div>`;
+        }
+        
+        function removeFile(index) {
+            fileDataList.splice(index, 1);
+            updateFileList();
+            if (fileDataList.length === 0) {
+                analyzeBtn.disabled = true;
+            }
         }
 
         analyzeBtn.addEventListener('click', async () => {
@@ -664,38 +689,44 @@
                 // 周末Happy Hour活动（7.18 12:00 ~ 7.20 18:00）
                 let weekendCondition = '';
                 let weekendCardCount = 0;
-                if (user.weekendDraws > 0) {
-                    // 多抽玩家：满210抽2随1张，满300抽赠不重复2张
-                    if (totalDraws >= 300) {
-                        weekendCondition = '高抽数玩家:满300抽赠2张';
+                // 规则修正：
+                // 1. 满300抽以上：无论7.18-7.20之间有没有抽，都得2张
+                // 2. 满210抽以上：得1张；如果在7.18-7.20之间抽了6抽及以上，拿两张
+                // 3. 普通玩家：根据活动期间抽数计算
+                if (totalDraws >= 300) {
+                    weekendCondition = '高抽数玩家:满300抽赠2张';
+                    weekendCardCount = 2;
+                } else if (totalDraws >= 210) {
+                    if (user.weekendDraws >= 6) {
+                        weekendCondition = '高抽数玩家:满210抽+活动期6抽得2张';
                         weekendCardCount = 2;
-                    } else if (totalDraws >= 210) {
+                    } else {
                         weekendCondition = '高抽数玩家:满210抽赠1张';
                         weekendCardCount = 1;
-                    } else {
-                        // 普通玩家
-                        if (isFirstTimeBuyer) {
-                            if (user.weekendDraws >= 20) {
-                                weekendCondition = '首次下单:20抽得两张';
-                                weekendCardCount = 2;
-                            } else if (user.weekendDraws >= 12) {
-                                weekendCondition = '首次下单:12抽得一张';
-                                weekendCardCount = 1;
-                            } else {
-                                weekendCondition = '首次下单:未达标';
-                                weekendCardCount = 0;
-                            }
+                    }
+                } else if (user.weekendDraws > 0) {
+                    // 普通玩家
+                    if (isFirstTimeBuyer) {
+                        if (user.weekendDraws >= 20) {
+                            weekendCondition = '首次下单:20抽得两张';
+                            weekendCardCount = 2;
+                        } else if (user.weekendDraws >= 12) {
+                            weekendCondition = '首次下单:12抽得一张';
+                            weekendCardCount = 1;
                         } else {
-                            if (user.weekendDraws >= 10) {
-                                weekendCondition = '非首次下单:10抽得两张';
-                                weekendCardCount = 2;
-                            } else if (user.weekendDraws >= 6) {
-                                weekendCondition = '非首次下单:6抽得一张';
-                                weekendCardCount = 1;
-                            } else {
-                                weekendCondition = '非首次下单:未达标';
-                                weekendCardCount = 0;
-                            }
+                            weekendCondition = '首次下单:未达标';
+                            weekendCardCount = 0;
+                        }
+                    } else {
+                        if (user.weekendDraws >= 10) {
+                            weekendCondition = '非首次下单:10抽得两张';
+                            weekendCardCount = 2;
+                        } else if (user.weekendDraws >= 6) {
+                            weekendCondition = '非首次下单:6抽得一张';
+                            weekendCardCount = 1;
+                        } else {
+                            weekendCondition = '非首次下单:未达标';
+                            weekendCardCount = 0;
                         }
                     }
                 } else {
@@ -705,14 +736,6 @@
 
                 // 收官终极活动（7.25 12:00 ~ 7.31 17:17）
                 // 端盒算381抽
-                const finalDuanheDraws = user.orderDraws.filter(o => 
-                    o.isDuanhe && o.time >= FINAL_START && o.time <= FINAL_END
-                ).reduce((sum, o) => sum + 381, 0);
-                const finalPrizeDraws = user.cards.filter(c => {
-                    // 需要找到对应卡片的支付时间
-                    return true;
-                }).length;
-                // 终极活动抽数（端盒按381算，普通抽按1算）
                 let finalEffectiveDraws = user.finalDraws;
                 // 端盒需要换算：原来是382，改成381
                 const finalDuanheOrderDraws = user.orderDraws.filter(o => 
@@ -726,75 +749,117 @@
                 let finalCondition = '';
                 let finalSetCount = 0; // 终极活动套数（最多3套）
 
-                if (user.finalDraws > 0) {
+                // 规则：
+                // 1. 高抽数玩家直接送（看总抽数）：
+                //    - 满270抽：随机1张镜头签（附赠23中随机1张）；拿满1套须+14抽
+                //    - 满330抽：随机2张镜头签（附赠23中随机2张）；拿满1套须+7抽
+                //    - 满390抽：全部3张镜头签（附赠23所有小卡）
+                //    - 端盒算381抽，赠送最多获得1套
+                // 2. 其他玩家：
+                //    - 非首次：+7抽随1张，+14抽随2张，+21抽得全套3张
+                //    - 首次：+15抽随1张，+25抽随2张，+35抽得全套3张
+                //    - 已获1套镜头签基础上：+3抽得23随机1张，+6抽得23随机2张，+9抽得23所有小卡
+                // 3. 可复数：已获1套基础上，+10抽复数1套，+20抽复数2套，最多3套
+                
+                if (user.finalDraws > 0 || totalDraws >= 270) {
                     // 高抽数玩家直接送（看总抽数）
                     if (totalDraws >= 390) {
                         finalJingtouqian = 3;
                         finalZhouzheng = 2;
                         finalKaitui = 1;
-                        finalCondition = '高抽数:满390抽得全套';
+                        finalCondition = '高抽数玩家:满390抽得全套';
                         finalSetCount = 1;
                     } else if (totalDraws >= 330) {
                         finalJingtouqian = 2;
                         finalZhouzheng = 2;
                         finalKaitui = 1;
-                        finalCondition = '高抽数:满330抽得2张镜头签+23随机2张';
-                        finalSetCount = 1; // 注：还没拿满1套镜头签
+                        finalCondition = '高抽数玩家:满330抽得2张镜头签+23随机2张';
+                        // 拿满1套须+7抽
+                        if (finalEffectiveDraws >= 7) {
+                            finalJingtouqian = 3;
+                            finalCondition = '高抽数玩家:满330抽+7抽得全套';
+                            finalSetCount = 1;
+                        }
                     } else if (totalDraws >= 270) {
                         finalJingtouqian = 1;
                         finalZhouzheng = 2;
                         finalKaitui = 1;
-                        finalCondition = '高抽数:满270抽得1张镜头签+23随机1张';
-                        finalSetCount = 1; // 还没拿满1套镜头签
+                        finalCondition = '高抽数玩家:满270抽得1张镜头签+23随机1张';
+                        // 拿满1套须+14抽
+                        if (finalEffectiveDraws >= 14) {
+                            finalJingtouqian = 3;
+                            finalCondition = '高抽数玩家:满270抽+14抽得全套';
+                            finalSetCount = 1;
+                        }
                     }
                     
                     // 其他玩家：用终极活动期间的抽数计算
-                    if (finalSetCount < 1) {
+                    if (finalSetCount < 1 && finalEffectiveDraws > 0) {
                         let baseJingtouqian = 0;
+                        let baseZhouzheng = 0;
+                        let baseKaitui = 0;
+                        
                         if (isFirstTimeBuyer) {
                             if (finalEffectiveDraws >= 35) {
                                 baseJingtouqian = 3;
+                                baseZhouzheng = 2;
+                                baseKaitui = 1;
+                                finalCondition = '首次下单:35抽得全套';
+                                finalSetCount = 1;
                             } else if (finalEffectiveDraws >= 25) {
                                 baseJingtouqian = 2;
+                                finalCondition = '首次下单:25抽得2张镜头签';
                             } else if (finalEffectiveDraws >= 15) {
                                 baseJingtouqian = 1;
+                                finalCondition = '首次下单:15抽得1张镜头签';
                             }
                         } else {
                             if (finalEffectiveDraws >= 21) {
                                 baseJingtouqian = 3;
+                                baseZhouzheng = 2;
+                                baseKaitui = 1;
+                                finalCondition = '非首次下单:21抽得全套';
+                                finalSetCount = 1;
                             } else if (finalEffectiveDraws >= 14) {
                                 baseJingtouqian = 2;
+                                finalCondition = '非首次下单:14抽得2张镜头签';
                             } else if (finalEffectiveDraws >= 7) {
                                 baseJingtouqian = 1;
+                                finalCondition = '非首次下单:7抽得1张镜头签';
                             }
                         }
+                        
                         finalJingtouqian = Math.max(finalJingtouqian, baseJingtouqian);
-                        if (finalJingtouqian >= 3) {
-                            finalSetCount = 1;
-                            finalCondition = isFirstTimeBuyer ? '首次下单:35抽得全套' : '非首次下单:21抽得全套';
-                        } else if (finalJingtouqian >= 2) {
-                            finalCondition = isFirstTimeBuyer ? '首次下单:25抽得2张' : '非首次下单:14抽得2张';
-                        } else if (finalJingtouqian >= 1) {
-                            finalCondition = isFirstTimeBuyer ? '首次下单:15抽得1张' : '非首次下单:7抽得1张';
+                        finalZhouzheng = Math.max(finalZhouzheng, baseZhouzheng);
+                        finalKaitui = Math.max(finalKaitui, baseKaitui);
+                        
+                        // 已获1套镜头签基础上获得23小卡
+                        if (finalJingtouqian >= 3 && !finalZhouzheng && !finalKaitui) {
+                            if (finalEffectiveDraws >= 9) {
+                                finalZhouzheng = 2;
+                                finalKaitui = 1;
+                                finalCondition += '+9抽得23所有小卡';
+                                finalSetCount = 1;
+                            } else if (finalEffectiveDraws >= 6) {
+                                finalZhouzheng = 1;
+                                finalCondition += '+6抽得23随机2张';
+                            } else if (finalEffectiveDraws >= 3) {
+                                finalZhouzheng = 1;
+                                finalCondition += '+3抽得23随机1张';
+                            }
                         }
                     }
-                    
-                    // 23张小卡（周正2张+开推1张=3张？不对，用户说"23所有小卡"应该是指23张R卡？等等，用户说的是周正小卡1套2张+开推制服小卡1张=3张，但又说"23中随机1张"...）
-                    // 这里按用户描述来：23应该是指23张R卡？不对，再看用户描述...
-                    // "附赠23中随机1张" / "23所有小卡"
-                    // 可能"23"是指"23张基础R卡"？但卡面写的是周正小卡1套2张+开推制服小卡1张。
-                    // 这里暂时按用户给的卡面来：周正小卡2张+开推制服小卡1张=3张一套（共23？不对...）
-                    // 等等，再仔细看："1套3张（镜头签）" + "1套2张（周正）" + "1张（开推）" = 6张？
-                    // 但"23中随机1张"应该是23张... 可能是指23张R卡？
-                    // 这里先按字面意思：23张是普通R卡，镜头签/周正/开推是特殊卡
-                    // 我们先计算镜头签套数，23的部分暂时标记是否获得
                     
                     // 复数：已获得1套基础上，+10抽1套，+20抽2套，最多3套
                     if (finalSetCount >= 1) {
                         let remainingDraws = finalEffectiveDraws;
                         // 减去拿第一套需要的抽数
                         if (totalDraws >= 390) {
-                            remainingDraws = finalEffectiveDraws; // 高抽数直接送，剩余抽数都算
+                            // 高抽数直接送，剩余抽数都算
+                        } else if (totalDraws >= 330) {
+                            remainingDraws -= 7;
+                        } else if (totalDraws >= 270) {
+                            remainingDraws -= 14;
                         } else if (isFirstTimeBuyer) {
                             remainingDraws -= 35;
                         } else {
