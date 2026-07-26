@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>抽抽乐订单数据分析（待优化2026.7.26 13：21更新）</title>
+    <title>抽抽乐订单数据分析（待优化2026.7.26 13：24更新）</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <style>
@@ -77,7 +77,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>📊 抽抽乐订单数据分析（待优化2026.7.26 13：20更新）</h1>
+            <h1>📊 抽抽乐订单数据分析（待优化2026.7.26 13：24更新）</h1>
             <p>上传Excel文件，自动生成数据分析报告</p>
         </div>
 
@@ -193,9 +193,12 @@
 
     <script>
         const ACTIVITY_START = new Date('2026-07-11T17:20:00');
-        const ACTIVITY_1H_END = new Date(ACTIVITY_START.getTime() + 60 * 60 * 1000);
-        const ACTIVITY_6H_END = new Date(ACTIVITY_START.getTime() + 6 * 60 * 60 * 1000);
-        const ACTIVITY_24H_END = new Date(ACTIVITY_START.getTime() + 24 * 60 * 60 * 1000);
+        // 第一小时截止时间增加5分钟缓冲（18:25），考虑支付延迟
+        const ACTIVITY_1H_END = new Date(ACTIVITY_START.getTime() + 65 * 60 * 1000);
+        // 6小时截止时间也相应增加5分钟缓冲
+        const ACTIVITY_6H_END = new Date(ACTIVITY_START.getTime() + 6 * 60 * 60 * 1000 + 5 * 60 * 1000);
+        // 24小时截止时间也相应增加5分钟缓冲
+        const ACTIVITY_24H_END = new Date(ACTIVITY_START.getTime() + 24 * 60 * 60 * 1000 + 5 * 60 * 1000);
         const ROMANCE_START = new Date('2026-07-13T12:00:00');
         const ROMANCE_END = new Date('2026-07-15T18:00:00');
         // 周末Happy Hour限时福利（柯舟求剑白瓷小卡）
