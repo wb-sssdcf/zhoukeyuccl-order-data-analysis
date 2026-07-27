@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>抽抽乐订单数据分析（待优化2026.7.27 21：15更新）</title>
+    <title>抽抽乐订单数据分析（待优化2026.7.27 21：52更新）</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <style>
@@ -77,7 +77,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>📊 抽抽乐订单数据分析（待优化2026.7.27 21：15更新）</h1>
+            <h1>📊 抽抽乐订单数据分析（待优化2026.7.27 21：52更新）</h1>
             <p>上传Excel文件，自动生成数据分析报告</p>
         </div>
 
@@ -129,6 +129,21 @@
                             <tr><th>卡片名称</th><th>卡片类型</th><th>抽取张数</th><th>涉及用户数</th></tr>
                         </thead>
                         <tbody id="cardStatsBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="table-section">
+                <div class="table-header">
+                    <h3>🌟 终极活动卡类型汇总（A/B/C/D/E/F）</h3>
+                    <span style="font-size:12px;color:#999;">收官终极活动小卡统计</span>
+                </div>
+                <div class="table-wrapper" style="max-height: 200px;">
+                    <table id="finalCardTypeStatsTable">
+                        <thead>
+                            <tr><th>卡类型</th><th>对应卡面</th><th>抽取张数</th><th>涉及用户数</th></tr>
+                        </thead>
+                        <tbody id="finalCardTypeStatsBody"></tbody>
                     </table>
                 </div>
             </div>
@@ -209,7 +224,7 @@
         const FINAL_END = new Date('2026-07-31T17:17:00');
         const ACTIVITY_TOTAL_END = new Date('2026-07-31T17:17:00');
 
-        let fileData = null, userData = [], cardStats = [], typeStats = [], activityStats = [], milestoneStats = [];
+        let fileData = null, userData = [], cardStats = [], typeStats = [], activityStats = [], milestoneStats = [], finalCardTypeStats = [];
         let currentPage = 1, pageSize = 20, filteredData = [];
         let charts = {};
 
@@ -374,6 +389,41 @@
             if (name.startsWith('SR')) return 'SR';
             if (name.startsWith('R')) return 'R';
             if (name.startsWith('N')) return 'N';
+            // 识别终极活动卡类型A/B/C/D/E/F（多种格式）
+            // 格式1: [A], (A), 【A】
+            if (name.includes('[A]') || name.includes('(A)') || name.includes('【A】')) return '终极A';
+            if (name.includes('[B]') || name.includes('(B)') || name.includes('【B】')) return '终极B';
+            if (name.includes('[C]') || name.includes('(C)') || name.includes('【C】')) return '终极C';
+            if (name.includes('[D]') || name.includes('(D)') || name.includes('【D】')) return '终极D';
+            if (name.includes('[E]') || name.includes('(E)') || name.includes('【E】')) return '终极E';
+            if (name.includes('[F]') || name.includes('(F)') || name.includes('【F】')) return '终极F';
+            // 格式2: A-XXX, XXX-A
+            if ((name.includes('-A') || name.includes('A-')) && !name.startsWith('A')) return '终极A';
+            if ((name.includes('-B') || name.includes('B-')) && !name.startsWith('B')) return '终极B';
+            if ((name.includes('-C') || name.includes('C-')) && !name.startsWith('C')) return '终极C';
+            if ((name.includes('-D') || name.includes('D-')) && !name.startsWith('D')) return '终极D';
+            if ((name.includes('-E') || name.includes('E-')) && !name.startsWith('E')) return '终极E';
+            if ((name.includes('-F') || name.includes('F-')) && !name.startsWith('F')) return '终极F';
+            // 格式3: 包含特定关键词
+            if (name.includes('镜头签') || name.includes('光栅卡')) {
+                if (name.includes('A')) return '终极A';
+                if (name.includes('B')) return '终极B';
+                if (name.includes('C')) return '终极C';
+            }
+            if (name.includes('周正') || name.includes('新剧角色')) {
+                if (name.includes('D')) return '终极D';
+                if (name.includes('E')) return '终极E';
+            }
+            if (name.includes('开推') || name.includes('制服')) return '终极F';
+            // 格式4: 终极活动相关
+            if (name.includes('收官') || name.includes('终极')) {
+                if (name.includes('A')) return '终极A';
+                if (name.includes('B')) return '终极B';
+                if (name.includes('C')) return '终极C';
+                if (name.includes('D')) return '终极D';
+                if (name.includes('E')) return '终极E';
+                if (name.includes('F')) return '终极F';
+            }
             return '其他';
         }
 
@@ -752,54 +802,57 @@
                 let finalCondition = '';
                 let finalSetCount = 0; // 终极活动套数（最多3套）
 
-                // 规则对照图3和图4：
-                // 图4简化规则（拿满全套的总抽数）：
-                //   - 满390抽：免费1套 / 抽10得2套 / 抽20得3套
-                //   - 满330抽：抽7得1套 / 抽17得2套 / 抽27得3套
-                //   - 满270抽：抽14得1套 / 抽24得2套 / 抽34得3套
-                //   - 抽过的（非首次）：抽30得1套 / 抽40得2套 / 抽50得3套
-                //   - 没抽过的（首次）：抽44得1套 / 抽54得2套 / 抽64得3套
-                // 图3分步规则：
-                //   - 非首次：+7抽随机1张镜头签，+14抽随机2张，+21抽得全套3张镜头签
-                //   - 首次：+15抽随机1张，+25抽随机2张，+35抽得全套3张镜头签
-                //   - 在已获得镜头签全套基础上：+3抽得周正1张，+6抽得周正2张，+9抽得所有
+                // 完整规则：
+                // 一、高抽数玩家（看总抽数）：
+                //   - 满270抽：A/B/C随机1张 + D/E/F随机1张（拿满ABCDEF须再+14抽）
+                //   - 满330抽：A/B/C随机2张 + D/E/F随机2张（拿满ABCDEF须再+7抽）
+                //   - 满390抽：获得ABCDEF全部内容（3镜头签+2周正+1开推）
+                // 二、其他玩家（按活动期抽数）：
+                //   非首次：+7抽A/B/C随机1张，+14抽随机2张，+21抽ABC全套3张
+                //   首次：+15抽A/B/C随机1张，+25抽随机2张，+35抽ABC全套3张
+                //   ABC全套基础上追加：+3抽D/E/F随机1张，+6抽随机2张，+9抽DEF全部
+                // 三、可复数：已获1套基础上，+10抽复数1套，+20抽复数2套，最多3套
                 
                 if (user.finalDraws > 0 || totalDraws >= 270) {
                     // 计算拿满第一套需要的抽数（baseDraws）
                     let baseDraws = 0; // 拿满第一套需要的活动期抽数
                     
                     if (totalDraws >= 390) {
-                        // 满390抽直接得全套，不需要活动期抽数
+                        // 满390抽直接得ABCDEF全套，不需要活动期抽数
                         finalJingtouqian = 3;
                         finalZhouzheng = 2;
                         finalKaitui = 1;
-                        finalCondition = '高抽数玩家:满390抽得全套';
+                        finalCondition = '高抽数玩家:满390抽得ABCDEF全套';
                         finalSetCount = 1;
                         baseDraws = 0; // 已经有1套，剩余抽数直接算复数
                     } else if (totalDraws >= 330) {
-                        // 满330抽送：随机2张镜头签 + 随机2张周正
+                        // 满330抽：A/B/C随机2张 + D/E/F随机2张
                         finalJingtouqian = 2;
-                        finalZhouzheng = 2;
-                        finalCondition = '高抽数玩家:满330抽得2张镜头签+2张周正';
+                        // D/E/F随机2张：简化为1周正+1开推
+                        finalZhouzheng = 1;
+                        finalKaitui = 1;
+                        finalCondition = '高抽数玩家:满330抽得2张镜头签+D/E/F随机2张';
                         // 拿满ABCDEF须再+7抽
                         if (finalEffectiveDraws >= 7) {
                             finalJingtouqian = 3;
+                            finalZhouzheng = 2;
                             finalKaitui = 1;
-                            finalCondition = '高抽数玩家:满330抽+7抽得全套';
+                            finalCondition = '高抽数玩家:满330抽+7抽得ABCDEF全套';
                             finalSetCount = 1;
                         }
                         baseDraws = 7;
                     } else if (totalDraws >= 270) {
-                        // 满270抽送：随机1张镜头签 + 随机1张周正
+                        // 满270抽：A/B/C随机1张 + D/E/F随机1张
                         finalJingtouqian = 1;
+                        // D/E/F随机1张：简化为周正
                         finalZhouzheng = 1;
-                        finalCondition = '高抽数玩家:满270抽得1张镜头签+1张周正';
+                        finalCondition = '高抽数玩家:满270抽得1张镜头签+D/E/F随机1张';
                         // 拿满ABCDEF须再+14抽
                         if (finalEffectiveDraws >= 14) {
                             finalJingtouqian = 3;
                             finalZhouzheng = 2;
                             finalKaitui = 1;
-                            finalCondition = '高抽数玩家:满270抽+14抽得全套';
+                            finalCondition = '高抽数玩家:满270抽+14抽得ABCDEF全套';
                             finalSetCount = 1;
                         }
                         baseDraws = 14;
@@ -815,49 +868,54 @@
                             finalJingtouqian = 3;
                             finalZhouzheng = 2;
                             finalKaitui = 1;
-                            finalCondition = isFirstTimeBuyer ? '首次下单:44抽得全套' : '非首次下单:30抽得全套';
+                            finalCondition = isFirstTimeBuyer ? '首次下单:44抽得ABCDEF全套' : '非首次下单:30抽得ABCDEF全套';
                             finalSetCount = 1;
                         } else {
                             // 分步计算：先得镜头签，再得周正和开推
                             if (isFirstTimeBuyer) {
-                                // 首次：+15抽随机1张，+25抽随机2张，+35抽得全套3张镜头签
+                                // 首次：+15抽随机1张，+25抽随机2张，+35抽得ABC全套3张
                                 if (finalEffectiveDraws >= 35) {
                                     finalJingtouqian = 3;
-                                    finalCondition = '首次下单:35抽得3张镜头签';
+                                    finalCondition = '首次下单:35抽得ABC全套';
                                 } else if (finalEffectiveDraws >= 25) {
                                     finalJingtouqian = 2;
-                                    finalCondition = '首次下单:25抽得2张镜头签';
+                                    finalCondition = '首次下单:25抽得A/B/C随机2张';
                                 } else if (finalEffectiveDraws >= 15) {
                                     finalJingtouqian = 1;
-                                    finalCondition = '首次下单:15抽得1张镜头签';
+                                    finalCondition = '首次下单:15抽得A/B/C随机1张';
                                 }
                             } else {
-                                // 非首次：+7抽随机1张，+14抽随机2张，+21抽得全套3张镜头签
+                                // 非首次：+7抽随机1张，+14抽随机2张，+21抽得ABC全套3张
                                 if (finalEffectiveDraws >= 21) {
                                     finalJingtouqian = 3;
-                                    finalCondition = '非首次下单:21抽得3张镜头签';
+                                    finalCondition = '非首次下单:21抽得ABC全套';
                                 } else if (finalEffectiveDraws >= 14) {
                                     finalJingtouqian = 2;
-                                    finalCondition = '非首次下单:14抽得2张镜头签';
+                                    finalCondition = '非首次下单:14抽得A/B/C随机2张';
                                 } else if (finalEffectiveDraws >= 7) {
                                     finalJingtouqian = 1;
-                                    finalCondition = '非首次下单:7抽得1张镜头签';
+                                    finalCondition = '非首次下单:7抽得A/B/C随机1张';
                                 }
                             }
                             
-                            // 在已获得镜头签全套的基础上获得周正和开推小卡
+                            // 在已经拥有ABC全套基础上追加抽取
                             if (finalJingtouqian >= 3) {
-                                if (finalEffectiveDraws >= 9) {
+                                const lensFullDraws = isFirstTimeBuyer ? 35 : 21; // 得ABC全套需要的抽数
+                                const extraDraws = finalEffectiveDraws - lensFullDraws; // 超出ABC的抽数
+                                if (extraDraws >= 9) {
                                     finalZhouzheng = 2;
                                     finalKaitui = 1;
-                                    finalCondition += '+9抽得周正2张+开推1张';
+                                    finalCondition += '+9抽得DEF全部';
                                     finalSetCount = 1;
-                                } else if (finalEffectiveDraws >= 6) {
-                                    finalZhouzheng = 2;
-                                    finalCondition += '+6抽得周正2张';
-                                } else if (finalEffectiveDraws >= 3) {
+                                } else if (extraDraws >= 6) {
+                                    // D/E/F随机2张：简化为1周正+1开推
                                     finalZhouzheng = 1;
-                                    finalCondition += '+3抽得周正1张';
+                                    finalKaitui = 1;
+                                    finalCondition += '+6抽得D/E/F随机2张';
+                                } else if (extraDraws >= 3) {
+                                    // D/E/F随机1张：简化为周正
+                                    finalZhouzheng = 1;
+                                    finalCondition += '+3抽得D/E/F随机1张';
                                 }
                             }
                         }
@@ -922,6 +980,33 @@
                 const stat = typeCountMap.get(card.cardType); stat.count++; stat.cards.add(card.cardName); stat.users.add(card.wechat);
             });
             typeStats = Array.from(typeCountMap.values()).sort((a, b) => b.count - a.count);
+
+            // 终极活动卡类型汇总（A/B/C/D/E/F）
+            // 从用户数据中统计获得的终极活动小卡数量
+            const finalCardTypeMap = new Map();
+            ['终极A', '终极B', '终极C', '终极D', '终极E', '终极F'].forEach(type => {
+                finalCardTypeMap.set(type, { cardType: type, count: 0, users: new Set() });
+            });
+            
+            userData.forEach(user => {
+                // 镜头签 A/B/C
+                for (let i = 0; i < user.finalJingtouqian; i++) {
+                    const types = ['终极A', '终极B', '终极C'];
+                    const type = types[i % types.length];
+                    const stat = finalCardTypeMap.get(type); stat.count++; stat.users.add(user.wechat);
+                }
+                // 周正小卡 D/E
+                for (let i = 0; i < user.finalZhouzheng; i++) {
+                    const types = ['终极D', '终极E'];
+                    const type = types[i % types.length];
+                    const stat = finalCardTypeMap.get(type); stat.count++; stat.users.add(user.wechat);
+                }
+                // 开推制服 F
+                for (let i = 0; i < user.finalKaitui; i++) {
+                    const stat = finalCardTypeMap.get('终极F'); stat.count++; stat.users.add(user.wechat);
+                }
+            });
+            finalCardTypeStats = Array.from(finalCardTypeMap.values()).sort((a, b) => a.cardType.localeCompare(b.cardType));
 
             // 活动期统计（按时间段划分，不重叠）
             // 活动时间：2026-07-11 17:20 ~ 2026-07-31 17:17
@@ -1075,6 +1160,36 @@
             `;
             document.getElementById('cardTotalCount').textContent = cardStats.length;
 
+            // 渲染终极活动卡类型汇总表格
+            const finalCardTypeStatsBody = document.getElementById('finalCardTypeStatsBody');
+            const finalCardInfo = {
+                '终极A': '镜头签A',
+                '终极B': '镜头签B',
+                '终极C': '镜头签C',
+                '终极D': '周正小卡D',
+                '终极E': '周正小卡E',
+                '终极F': '开推制服F'
+            };
+            const totalFinalCardCount = finalCardTypeStats.reduce((sum, c) => sum + c.count, 0);
+            const totalFinalCardUsers = new Set();
+            finalCardTypeStats.forEach(c => c.users.forEach(u => totalFinalCardUsers.add(u)));
+            
+            finalCardTypeStatsBody.innerHTML = finalCardTypeStats.map(card => `
+                <tr>
+                    <td>${card.cardType}</td>
+                    <td>${finalCardInfo[card.cardType] || card.cardType}</td>
+                    <td>${card.count}</td>
+                    <td>${card.users.size}</td>
+                </tr>
+            `).join('') + `
+                <tr style="background:#f0f4ff;font-weight:bold;">
+                    <td>合计</td>
+                    <td>终极活动小卡</td>
+                    <td>${totalFinalCardCount}</td>
+                    <td>${totalFinalCardUsers.size}</td>
+                </tr>
+            `;
+
             // 渲染活动期统计表格
             const activityStatsBody = document.getElementById('activityStatsBody');
             activityStatsBody.innerHTML = activityStats.map(stat => `
@@ -1194,6 +1309,25 @@
             return XLSX.utils.aoa_to_sheet([headers, ...data]);
         }
 
+        function exportFinalCardTypeSheet() {
+            const headers = ['卡类型', '对应卡面', '抽取张数', '涉及用户数'];
+            const finalCardInfo = {
+                '终极A': '镜头签A',
+                '终极B': '镜头签B',
+                '终极C': '镜头签C',
+                '终极D': '周正小卡D',
+                '终极E': '周正小卡E',
+                '终极F': '开推制服F'
+            };
+            const data = finalCardTypeStats.map(c => [c.cardType, finalCardInfo[c.cardType] || c.cardType, c.count, c.users.size]);
+            // 添加合计行
+            const totalCount = finalCardTypeStats.reduce((sum, c) => sum + c.count, 0);
+            const totalUsers = new Set();
+            finalCardTypeStats.forEach(c => c.users.forEach(u => totalUsers.add(u)));
+            data.push(['合计', '终极活动小卡', totalCount, totalUsers.size]);
+            return XLSX.utils.aoa_to_sheet([headers, ...data]);
+        }
+
         function exportActivitySheet() {
             const headers = ['时间段', '订单数', '参与用户数', '总抽数'];
             const data = activityStats.map(s => [s.period, s.orders, s.userCount, s.draws]);
@@ -1212,6 +1346,7 @@
             if (type === 'all') {
                 XLSX.utils.book_append_sheet(workbook, exportUserSheet(), '用户统计');
                 XLSX.utils.book_append_sheet(workbook, exportCardSheet(), '卡片统计');
+                XLSX.utils.book_append_sheet(workbook, exportFinalCardTypeSheet(), '终极活动卡类型汇总');
                 XLSX.utils.book_append_sheet(workbook, exportActivitySheet(), '活动期统计');
                 XLSX.utils.book_append_sheet(workbook, exportMilestoneSheet(), '满赠达标统计');
                 XLSX.writeFile(workbook, getTimestampFilename('抽抽乐数据分析_全部'));
