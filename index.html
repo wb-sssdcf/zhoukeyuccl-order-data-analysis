@@ -77,7 +77,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>📊 抽抽乐订单数据分析（待优化2026.7.27 21：52更新）</h1>
+            <h1>📊 抽抽乐订单数据分析（待优化2026.7.27 22：30更新）</h1>
             <p>上传Excel文件，自动生成数据分析报告</p>
         </div>
 
@@ -144,6 +144,21 @@
                             <tr><th>卡类型</th><th>对应卡面</th><th>抽取张数</th><th>涉及用户数</th></tr>
                         </thead>
                         <tbody id="finalCardTypeStatsBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="table-section">
+                <div class="table-header">
+                    <h3>🎁 活动小卡统计（限时小卡/浪漫疯子/周末活动）</h3>
+                    <span style="font-size:12px;color:#999;">各活动获得小卡汇总</span>
+                </div>
+                <div class="table-wrapper" style="max-height: 200px;">
+                    <table id="activityCardStatsTable">
+                        <thead>
+                            <tr><th>活动小卡类型</th><th>对应活动</th><th>发放张数</th><th>涉及用户数</th></tr>
+                        </thead>
+                        <tbody id="activityCardStatsBody"></tbody>
                     </table>
                 </div>
             </div>
@@ -224,7 +239,7 @@
         const FINAL_END = new Date('2026-07-31T17:17:00');
         const ACTIVITY_TOTAL_END = new Date('2026-07-31T17:17:00');
 
-        let fileData = null, userData = [], cardStats = [], typeStats = [], activityStats = [], milestoneStats = [], finalCardTypeStats = [];
+        let fileData = null, userData = [], cardStats = [], typeStats = [], activityStats = [], milestoneStats = [], finalCardTypeStats = [], activityCardStats = [];
         let currentPage = 1, pageSize = 20, filteredData = [];
         let charts = {};
 
@@ -690,7 +705,13 @@
                 user.cards.forEach(c => cardCounts[c] = (cardCounts[c] || 0) + 1);
                 const itemList = uniqueCards.map(c => `${c}x${cardCounts[c]}`).join('; ');
 
-                const isFirstTimeBuyer = !firstPayTime || firstPayTime >= ROMANCE_START;
+                // 判断各活动区间的首次下单状态
+                // 浪漫疯子活动（7.13-7.15）：判断7.13之前是否有下单
+                const isFirstTimeRomance = !firstPayTime || firstPayTime >= ROMANCE_START;
+                // 周末活动（7.18-7.20）：判断7.18之前是否有下单
+                const isFirstTimeWeekend = !firstPayTime || firstPayTime >= WEEKEND_START;
+                // 终极活动（7.25-7.31）：判断7.25之前是否有下单
+                const isFirstTimeFinal = !firstPayTime || firstPayTime >= FINAL_START;
                 const cardsBefore10 = [...user.cards].slice(0, 10);
 
                 let full10Time = null;
@@ -729,7 +750,7 @@
                 }
 
                 let romanceCondition = '';
-                if (isFirstTimeBuyer) {
+                if (isFirstTimeRomance) {
                     if (user.romanceDraws >= 20) romanceCondition = '首次下单:20抽得两张';
                     else if (user.romanceDraws >= 12) romanceCondition = '首次下单:12抽得一张';
                     else romanceCondition = '首次下单:未达标';
@@ -759,7 +780,7 @@
                     }
                 } else if (user.weekendDraws > 0) {
                     // 普通玩家
-                    if (isFirstTimeBuyer) {
+                    if (isFirstTimeWeekend) {
                         if (user.weekendDraws >= 20) {
                             weekendCondition = '首次下单:20抽得两张';
                             weekendCardCount = 2;
@@ -858,7 +879,7 @@
                         baseDraws = 14;
                     } else {
                         // 其他玩家：按活动期抽数计算
-                        if (isFirstTimeBuyer) {
+                        if (isFirstTimeFinal) {
                             baseDraws = 44; // 首次下单拿满全套需要44抽
                         } else {
                             baseDraws = 30; // 非首次下单拿满全套需要30抽
@@ -868,11 +889,11 @@
                             finalJingtouqian = 3;
                             finalZhouzheng = 2;
                             finalKaitui = 1;
-                            finalCondition = isFirstTimeBuyer ? '首次下单:44抽得ABCDEF全套' : '非首次下单:30抽得ABCDEF全套';
+                            finalCondition = isFirstTimeFinal ? '首次下单:44抽得ABCDEF全套' : '非首次下单:30抽得ABCDEF全套';
                             finalSetCount = 1;
                         } else {
                             // 分步计算：先得镜头签，再得周正和开推
-                            if (isFirstTimeBuyer) {
+                            if (isFirstTimeFinal) {
                                 // 首次：+15抽随机1张，+25抽随机2张，+35抽得ABC全套3张
                                 if (finalEffectiveDraws >= 35) {
                                     finalJingtouqian = 3;
@@ -900,7 +921,7 @@
                             
                             // 在已经拥有ABC全套基础上追加抽取
                             if (finalJingtouqian >= 3) {
-                                const lensFullDraws = isFirstTimeBuyer ? 35 : 21; // 得ABC全套需要的抽数
+                                const lensFullDraws = isFirstTimeFinal ? 35 : 21; // 得ABC全套需要的抽数
                                 const extraDraws = finalEffectiveDraws - lensFullDraws; // 超出ABC的抽数
                                 if (extraDraws >= 9) {
                                     finalZhouzheng = 2;
@@ -956,7 +977,7 @@
                     limitedCards,
                     activity0_1h: user.activityDraws['0-1小时'], activity1_6h: user.activityDraws['1-6小时'],
                     activity6_24h: user.activityDraws['6-24小时'], romanceDraws: user.romanceDraws,
-                    romanceOrders: user.romanceOrders, isFirstTimeBuyer: isFirstTimeBuyer ? '是' : '否',
+                    romanceOrders: user.romanceOrders, isFirstTimeBuyer: isFirstTimeFinal ? '是' : '否',
                     romanceCardCount: uniqueCards.filter(c => c.includes('浪漫疯子')).length, romanceCondition,
                     weekendDraws: user.weekendDraws, weekendCardCount, weekendCondition,
                     finalDraws: user.finalDraws, finalEffectiveDraws, finalJingtouqian, finalZhouzheng, finalKaitui, finalSetCount, finalCondition,
@@ -982,33 +1003,97 @@
             typeStats = Array.from(typeCountMap.values()).sort((a, b) => b.count - a.count);
 
             // 终极活动卡类型汇总（A/B/C/D/E/F）
-            // 从用户数据中统计获得的终极活动小卡数量
+            // 区分：确定获得和随机获得
+            // 镜头签（A/B/C）为一类，惊喜加赠（D/E/F）为一类
             const finalCardTypeMap = new Map();
-            ['终极A', '终极B', '终极C', '终极D', '终极E', '终极F'].forEach(type => {
+            ['终极A', '终极B', '终极C', '惊喜加赠D', '惊喜加赠E', '惊喜加赠F', '镜头签随机', '惊喜加赠随机'].forEach(type => {
                 finalCardTypeMap.set(type, { cardType: type, count: 0, users: new Set() });
             });
             
             userData.forEach(user => {
+                // 根据获得条件判断是确定获得还是随机获得
+                const condition = user.finalCondition || '';
+                const isFullSet = condition.includes('ABCDEF全套') || condition.includes('满390抽');
+                
                 // 镜头签 A/B/C
                 for (let i = 0; i < user.finalJingtouqian; i++) {
-                    const types = ['终极A', '终极B', '终极C'];
-                    const type = types[i % types.length];
-                    const stat = finalCardTypeMap.get(type); stat.count++; stat.users.add(user.wechat);
+                    if (isFullSet) {
+                        // 确定获得：按顺序分配
+                        const types = ['终极A', '终极B', '终极C'];
+                        const type = types[i % types.length];
+                        const stat = finalCardTypeMap.get(type); stat.count++; stat.users.add(user.wechat);
+                    } else {
+                        // 随机获得：计入随机类型
+                        const stat = finalCardTypeMap.get('镜头签随机'); stat.count++; stat.users.add(user.wechat);
+                    }
                 }
-                // 周正小卡 D/E
-                for (let i = 0; i < user.finalZhouzheng; i++) {
-                    const types = ['终极D', '终极E'];
-                    const type = types[i % types.length];
-                    const stat = finalCardTypeMap.get(type); stat.count++; stat.users.add(user.wechat);
-                }
-                // 开推制服 F
-                for (let i = 0; i < user.finalKaitui; i++) {
-                    const stat = finalCardTypeMap.get('终极F'); stat.count++; stat.users.add(user.wechat);
+                // 惊喜加赠 D/E/F（周正小卡+开推制服合并为一类）
+                const bonusCount = user.finalZhouzheng + user.finalKaitui;
+                for (let i = 0; i < bonusCount; i++) {
+                    if (isFullSet) {
+                        // 确定获得：按顺序分配
+                        const types = ['惊喜加赠D', '惊喜加赠E', '惊喜加赠F'];
+                        const type = types[i % types.length];
+                        const stat = finalCardTypeMap.get(type); stat.count++; stat.users.add(user.wechat);
+                    } else {
+                        // 随机获得：计入随机类型
+                        const stat = finalCardTypeMap.get('惊喜加赠随机'); stat.count++; stat.users.add(user.wechat);
+                    }
                 }
             });
-            finalCardTypeStats = Array.from(finalCardTypeMap.values()).sort((a, b) => a.cardType.localeCompare(b.cardType));
+            finalCardTypeStats = Array.from(finalCardTypeMap.values()).sort((a, b) => {
+                const order = ['终极A', '终极B', '终极C', '惊喜加赠D', '惊喜加赠E', '惊喜加赠F', '镜头签随机', '惊喜加赠随机'];
+                return order.indexOf(a.cardType) - order.indexOf(b.cardType);
+            });
 
-            // 活动期统计（按时间段划分，不重叠）
+            // 活动小卡统计（限时小卡123、浪漫疯子、周末活动）
+            // 细分到具体小卡编号，并区分随机和确定不重复
+            const activityCardMap = new Map();
+            ['限时小卡1', '限时小卡2', '限时小卡3', 
+             '浪漫疯子随机', '浪漫疯子不重复', 
+             '周末随机', '周末不重复'].forEach(type => {
+                activityCardMap.set(type, { cardType: type, count: 0, users: new Set() });
+            });
+            
+            userData.forEach(user => {
+                // 限时小卡统计
+                const limitedCardsStr = user.limitedCards || '';
+                if (limitedCardsStr.includes('小卡1')) {
+                    const stat = activityCardMap.get('限时小卡1'); stat.count++; stat.users.add(user.wechat);
+                }
+                if (limitedCardsStr.includes('小卡2')) {
+                    const stat = activityCardMap.get('限时小卡2'); stat.count++; stat.users.add(user.wechat);
+                }
+                if (limitedCardsStr.includes('小卡3')) {
+                    const stat = activityCardMap.get('限时小卡3'); stat.count++; stat.users.add(user.wechat);
+                }
+                // 浪漫疯子小卡统计（区分随机和确定不重复）
+                const romanceCondition = user.romanceCondition || '';
+                if (romanceCondition.includes('得两张')) {
+                    // 10抽或20抽：第一张随机，第二张不重复
+                    const stat1 = activityCardMap.get('浪漫疯子随机'); stat1.count++; stat1.users.add(user.wechat);
+                    const stat2 = activityCardMap.get('浪漫疯子不重复'); stat2.count++; stat2.users.add(user.wechat);
+                } else if (romanceCondition.includes('得一张')) {
+                    // 6抽或12抽：只有随机1张
+                    const stat = activityCardMap.get('浪漫疯子随机'); stat.count++; stat.users.add(user.wechat);
+                }
+                // 周末活动小卡统计（区分随机和确定不重复）
+                const weekendCondition = user.weekendCondition || '';
+                if (weekendCondition.includes('得2张') || weekendCondition.includes('赠2张')) {
+                    // 高抽数满300抽赠2张不重复，或活动期抽10/20抽得两张不重复
+                    const stat1 = activityCardMap.get('周末随机'); stat1.count++; stat1.users.add(user.wechat);
+                    const stat2 = activityCardMap.get('周末不重复'); stat2.count++; stat2.users.add(user.wechat);
+                } else if (weekendCondition.includes('得1张') || weekendCondition.includes('赠1张')) {
+                    // 高抽数满210抽赠1张随机，或活动期抽6/12抽得一张随机
+                    const stat = activityCardMap.get('周末随机'); stat.count++; stat.users.add(user.wechat);
+                }
+            });
+            activityCardStats = Array.from(activityCardMap.values()).sort((a, b) => {
+                const order = ['限时小卡1', '限时小卡2', '限时小卡3', 
+                              '浪漫疯子随机', '浪漫疯子不重复', 
+                              '周末随机', '周末不重复'];
+                return order.indexOf(a.cardType) - order.indexOf(b.cardType);
+            });
             // 活动时间：2026-07-11 17:20 ~ 2026-07-31 17:17
             const ACTIVITY_END = new Date('2026-07-31T17:17:00');
             const PHASE2_START = new Date(ACTIVITY_START.getTime() + 24 * 60 * 60 * 1000); // 7月12日17:20
@@ -1163,12 +1248,14 @@
             // 渲染终极活动卡类型汇总表格
             const finalCardTypeStatsBody = document.getElementById('finalCardTypeStatsBody');
             const finalCardInfo = {
-                '终极A': '镜头签A',
-                '终极B': '镜头签B',
-                '终极C': '镜头签C',
-                '终极D': '周正小卡D',
-                '终极E': '周正小卡E',
-                '终极F': '开推制服F'
+                '终极A': '镜头签A（确定）',
+                '终极B': '镜头签B（确定）',
+                '终极C': '镜头签C（确定）',
+                '惊喜加赠D': '惊喜加赠D（周正小卡）',
+                '惊喜加赠E': '惊喜加赠E（周正小卡）',
+                '惊喜加赠F': '惊喜加赠F（开推制服）',
+                '镜头签随机': '镜头签（随机）',
+                '惊喜加赠随机': '惊喜加赠（随机）'
             };
             const totalFinalCardCount = finalCardTypeStats.reduce((sum, c) => sum + c.count, 0);
             const totalFinalCardUsers = new Set();
@@ -1187,6 +1274,37 @@
                     <td>终极活动小卡</td>
                     <td>${totalFinalCardCount}</td>
                     <td>${totalFinalCardUsers.size}</td>
+                </tr>
+            `;
+
+            // 渲染活动小卡统计表格
+            const activityCardStatsBody = document.getElementById('activityCardStatsBody');
+            const activityCardInfo = {
+                '限时小卡1': '限时活动（0-1小时）',
+                '限时小卡2': '限时活动（0-6小时）',
+                '限时小卡3': '限时活动（0-24小时）',
+                '浪漫疯子随机': '浪漫疯子活动（7.13-7.15）随机1张',
+                '浪漫疯子不重复': '浪漫疯子活动（7.13-7.15）确定不重复',
+                '周末随机': '周末Happy Hour（7.18-7.20）随机1张',
+                '周末不重复': '周末Happy Hour（7.18-7.20）确定不重复'
+            };
+            const totalActivityCardCount = activityCardStats.reduce((sum, c) => sum + c.count, 0);
+            const totalActivityCardUsers = new Set();
+            activityCardStats.forEach(c => c.users.forEach(u => totalActivityCardUsers.add(u)));
+            
+            activityCardStatsBody.innerHTML = activityCardStats.map(card => `
+                <tr>
+                    <td>${card.cardType}</td>
+                    <td>${activityCardInfo[card.cardType] || card.cardType}</td>
+                    <td>${card.count}</td>
+                    <td>${card.users.size}</td>
+                </tr>
+            `).join('') + `
+                <tr style="background:#f0f4ff;font-weight:bold;">
+                    <td>合计</td>
+                    <td>活动小卡总计</td>
+                    <td>${totalActivityCardCount}</td>
+                    <td>${totalActivityCardUsers.size}</td>
                 </tr>
             `;
 
@@ -1312,12 +1430,14 @@
         function exportFinalCardTypeSheet() {
             const headers = ['卡类型', '对应卡面', '抽取张数', '涉及用户数'];
             const finalCardInfo = {
-                '终极A': '镜头签A',
-                '终极B': '镜头签B',
-                '终极C': '镜头签C',
-                '终极D': '周正小卡D',
-                '终极E': '周正小卡E',
-                '终极F': '开推制服F'
+                '终极A': '镜头签A（确定）',
+                '终极B': '镜头签B（确定）',
+                '终极C': '镜头签C（确定）',
+                '惊喜加赠D': '惊喜加赠D（周正小卡）',
+                '惊喜加赠E': '惊喜加赠E（周正小卡）',
+                '惊喜加赠F': '惊喜加赠F（开推制服）',
+                '镜头签随机': '镜头签（随机）',
+                '惊喜加赠随机': '惊喜加赠（随机）'
             };
             const data = finalCardTypeStats.map(c => [c.cardType, finalCardInfo[c.cardType] || c.cardType, c.count, c.users.size]);
             // 添加合计行
@@ -1325,6 +1445,26 @@
             const totalUsers = new Set();
             finalCardTypeStats.forEach(c => c.users.forEach(u => totalUsers.add(u)));
             data.push(['合计', '终极活动小卡', totalCount, totalUsers.size]);
+            return XLSX.utils.aoa_to_sheet([headers, ...data]);
+        }
+
+        function exportActivityCardSheet() {
+            const headers = ['活动小卡类型', '对应活动', '发放张数', '涉及用户数'];
+            const activityCardInfo = {
+                '限时小卡1': '限时活动（0-1小时）',
+                '限时小卡2': '限时活动（0-6小时）',
+                '限时小卡3': '限时活动（0-24小时）',
+                '浪漫疯子随机': '浪漫疯子活动（7.13-7.15）随机1张',
+                '浪漫疯子不重复': '浪漫疯子活动（7.13-7.15）确定不重复',
+                '周末随机': '周末Happy Hour（7.18-7.20）随机1张',
+                '周末不重复': '周末Happy Hour（7.18-7.20）确定不重复'
+            };
+            const data = activityCardStats.map(c => [c.cardType, activityCardInfo[c.cardType] || c.cardType, c.count, c.users.size]);
+            // 添加合计行
+            const totalCount = activityCardStats.reduce((sum, c) => sum + c.count, 0);
+            const totalUsers = new Set();
+            activityCardStats.forEach(c => c.users.forEach(u => totalUsers.add(u)));
+            data.push(['合计', '活动小卡总计', totalCount, totalUsers.size]);
             return XLSX.utils.aoa_to_sheet([headers, ...data]);
         }
 
@@ -1347,6 +1487,7 @@
                 XLSX.utils.book_append_sheet(workbook, exportUserSheet(), '用户统计');
                 XLSX.utils.book_append_sheet(workbook, exportCardSheet(), '卡片统计');
                 XLSX.utils.book_append_sheet(workbook, exportFinalCardTypeSheet(), '终极活动卡类型汇总');
+                XLSX.utils.book_append_sheet(workbook, exportActivityCardSheet(), '活动小卡统计');
                 XLSX.utils.book_append_sheet(workbook, exportActivitySheet(), '活动期统计');
                 XLSX.utils.book_append_sheet(workbook, exportMilestoneSheet(), '满赠达标统计');
                 XLSX.writeFile(workbook, getTimestampFilename('抽抽乐数据分析_全部'));
