@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>抽抽乐订单数据分析（待优化2026.7.27 21：01更新）</title>
+    <title>抽抽乐订单数据分析（待优化2026.7.27 21：15更新）</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <style>
@@ -77,7 +77,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>📊 抽抽乐订单数据分析（待优化2026.7.27 21：01更新）</h1>
+            <h1>📊 抽抽乐订单数据分析（待优化2026.7.27 21：15更新）</h1>
             <p>上传Excel文件，自动生成数据分析报告</p>
         </div>
 
@@ -753,18 +753,16 @@
                 let finalSetCount = 0; // 终极活动套数（最多3套）
 
                 // 规则对照图3和图4：
-                // 高抽数玩家（按总抽数）：
-                //   - 满270抽送：随机1张镜头签 + 随机1张周正；拿满ABCDEF须再+14抽
-                //   - 满330抽送：随机2张镜头签 + 随机2张周正；拿满ABCDEF须再+7抽
-                //   - 满390抽得：ABCDEF全部内容（3镜头签+2周正+1开推）
-                // 其他玩家（按活动期抽数）：
+                // 图4简化规则（拿满全套的总抽数）：
+                //   - 满390抽：免费1套 / 抽10得2套 / 抽20得3套
+                //   - 满330抽：抽7得1套 / 抽17得2套 / 抽27得3套
+                //   - 满270抽：抽14得1套 / 抽24得2套 / 抽34得3套
+                //   - 抽过的（非首次）：抽30得1套 / 抽40得2套 / 抽50得3套
+                //   - 没抽过的（首次）：抽44得1套 / 抽54得2套 / 抽64得3套
+                // 图3分步规则：
                 //   - 非首次：+7抽随机1张镜头签，+14抽随机2张，+21抽得全套3张镜头签
                 //   - 首次：+15抽随机1张，+25抽随机2张，+35抽得全套3张镜头签
-                // 在已获得镜头签全套的基础上：
-                //   - +3抽可得随机1张周正
-                //   - +6抽可得随机2张周正
-                //   - +9抽可得所有（周正2张+开推1张）
-                // 可复数（拿满1套后）：每+10抽复数1套，最多3套
+                //   - 在已获得镜头签全套基础上：+3抽得周正1张，+6抽得周正2张，+9抽得所有
                 
                 if (user.finalDraws > 0 || totalDraws >= 270) {
                     // 计算拿满第一套需要的抽数（baseDraws）
@@ -808,59 +806,70 @@
                     } else {
                         // 其他玩家：按活动期抽数计算
                         if (isFirstTimeBuyer) {
-                            baseDraws = 35; // 首次下单拿满全套需要35抽
+                            baseDraws = 44; // 首次下单拿满全套需要44抽
                         } else {
-                            baseDraws = 21; // 非首次下单拿满全套需要21抽
+                            baseDraws = 30; // 非首次下单拿满全套需要30抽
                         }
                         
                         if (finalEffectiveDraws >= baseDraws) {
                             finalJingtouqian = 3;
                             finalZhouzheng = 2;
                             finalKaitui = 1;
-                            finalCondition = isFirstTimeBuyer ? '首次下单:35抽得全套' : '非首次下单:21抽得全套';
+                            finalCondition = isFirstTimeBuyer ? '首次下单:44抽得全套' : '非首次下单:30抽得全套';
                             finalSetCount = 1;
-                        } else if (isFirstTimeBuyer) {
-                            if (finalEffectiveDraws >= 25) {
-                                finalJingtouqian = 2;
-                                finalCondition = '首次下单:25抽得2张镜头签';
-                            } else if (finalEffectiveDraws >= 15) {
-                                finalJingtouqian = 1;
-                                finalCondition = '首次下单:15抽得1张镜头签';
-                            }
                         } else {
-                            if (finalEffectiveDraws >= 14) {
-                                finalJingtouqian = 2;
-                                finalCondition = '非首次下单:14抽得2张镜头签';
-                            } else if (finalEffectiveDraws >= 7) {
-                                finalJingtouqian = 1;
-                                finalCondition = '非首次下单:7抽得1张镜头签';
+                            // 分步计算：先得镜头签，再得周正和开推
+                            if (isFirstTimeBuyer) {
+                                // 首次：+15抽随机1张，+25抽随机2张，+35抽得全套3张镜头签
+                                if (finalEffectiveDraws >= 35) {
+                                    finalJingtouqian = 3;
+                                    finalCondition = '首次下单:35抽得3张镜头签';
+                                } else if (finalEffectiveDraws >= 25) {
+                                    finalJingtouqian = 2;
+                                    finalCondition = '首次下单:25抽得2张镜头签';
+                                } else if (finalEffectiveDraws >= 15) {
+                                    finalJingtouqian = 1;
+                                    finalCondition = '首次下单:15抽得1张镜头签';
+                                }
+                            } else {
+                                // 非首次：+7抽随机1张，+14抽随机2张，+21抽得全套3张镜头签
+                                if (finalEffectiveDraws >= 21) {
+                                    finalJingtouqian = 3;
+                                    finalCondition = '非首次下单:21抽得3张镜头签';
+                                } else if (finalEffectiveDraws >= 14) {
+                                    finalJingtouqian = 2;
+                                    finalCondition = '非首次下单:14抽得2张镜头签';
+                                } else if (finalEffectiveDraws >= 7) {
+                                    finalJingtouqian = 1;
+                                    finalCondition = '非首次下单:7抽得1张镜头签';
+                                }
                             }
-                        }
-                        
-                        // 在已获得镜头签全套的基础上获得周正和开推小卡（非高抽数玩家）
-                        if (finalJingtouqian >= 3 && finalZhouzheng < 2) {
-                            if (finalEffectiveDraws >= 9) {
-                                finalZhouzheng = 2;
-                                finalKaitui = 1;
-                                finalCondition += '+9抽得周正2张+开推1张';
-                                finalSetCount = 1;
-                            } else if (finalEffectiveDraws >= 6) {
-                                finalZhouzheng = 2;
-                                finalCondition += '+6抽得周正2张';
-                            } else if (finalEffectiveDraws >= 3) {
-                                finalZhouzheng = 1;
-                                finalCondition += '+3抽得周正1张';
+                            
+                            // 在已获得镜头签全套的基础上获得周正和开推小卡
+                            if (finalJingtouqian >= 3) {
+                                if (finalEffectiveDraws >= 9) {
+                                    finalZhouzheng = 2;
+                                    finalKaitui = 1;
+                                    finalCondition += '+9抽得周正2张+开推1张';
+                                    finalSetCount = 1;
+                                } else if (finalEffectiveDraws >= 6) {
+                                    finalZhouzheng = 2;
+                                    finalCondition += '+6抽得周正2张';
+                                } else if (finalEffectiveDraws >= 3) {
+                                    finalZhouzheng = 1;
+                                    finalCondition += '+3抽得周正1张';
+                                }
                             }
                         }
                     }
                     
                     // 复数：拿满1套后，每+10抽复数1套，最多3套
-                    // 图4简化规则验证：
+                    // 图4规则验证：
                     // - 满390抽：免费1套 / 抽10得2套 / 抽20得3套
-                    // - 满330抽：抽7得1套 / 抽17得2套 / 抽27得3套 (7+10=17, 7+20=27)
-                    // - 满270抽：抽14得1套 / 抽24得2套 / 抽34得3套 (14+10=24, 14+20=34)
-                    // - 抽过的：抽30得1套 / 抽40得2套 / 抽50得3套 (30+10=40, 30+20=50)
-                    // - 没抽过的：抽44得1套 / 抽54得2套 / 抽64得3套 (44+10=54, 44+20=64)
+                    // - 满330抽：抽7得1套 / 抽17得2套 / 抽27得3套
+                    // - 满270抽：抽14得1套 / 抽24得2套 / 抽34得3套
+                    // - 抽过的：抽30得1套 / 抽40得2套 / 抽50得3套
+                    // - 没抽过的：抽44得1套 / 抽54得2套 / 抽64得3套
                     if (finalSetCount >= 1) {
                         let remainingDraws = finalEffectiveDraws - baseDraws;
                         if (remainingDraws > 0) {
