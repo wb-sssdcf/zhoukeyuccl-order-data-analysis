@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>抽抽乐订单数据分析（待优化2026.8.1 23：58更新）</title>
+    <title>抽抽乐订单数据分析（待优化2026.8.2 更新）</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <style>
@@ -48,11 +48,32 @@
         .table-header h3 { font-size: 16px; color: #333; }
         .search-box { padding: 8px 15px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; width: 200px; }
         
-        .table-wrapper { overflow-x: auto; max-height: 700px; overflow-y: auto; }
-        table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; }
-        th { background: #f8f9ff; color: #666; font-weight: 600; position: sticky; top: 0; z-index: 10; }
+        .table-wrapper { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
+        th, td { padding: 6px 8px; text-align: left; border-bottom: 1px solid #eee; overflow: hidden; text-overflow: ellipsis; }
+        th { background: #f8f9ff; color: #666; font-weight: 600; position: sticky; top: 0; z-index: 10; padding: 6px 8px; }
         tr:hover { background: #f8f9ff; }
+        /* 用户数据表列宽 */
+        #userTable col.col-account { width: 90px; }
+        #userTable col.col-phone { width: 90px; }
+        #userTable col.col-orders { width: 50px; }
+        #userTable col.col-orderno { width: 130px; }
+        #userTable col.col-items { width: 150px; }
+        #userTable col.col-draws { width: 50px; }
+        #userTable col.col-duanhe { width: 55px; }
+        #userTable col.col-milestone { width: 200px; }
+        #userTable col.col-allbonus { width: 110px; }
+        #userTable col.col-specialbonus { width: 110px; }
+        #userTable col.col-limited { width: 110px; }
+        #userTable col.col-paytime { width: 130px; }
+        #userTable col.col-romancedraws { width: 70px; }
+        #userTable col.col-romance { width: 90px; }
+        #userTable col.col-weekendraws { width: 70px; }
+        #userTable col.col-weekend { width: 90px; }
+        #userTable col.col-finaldraws { width: 70px; }
+        #userTable col.col-final { width: 150px; }
+        #userTable td, #userTable th { white-space: nowrap; }
+        #userTable td.wrap, #userTable th.wrap { white-space: normal; }
         
         .pagination { display: flex; justify-content: center; align-items: center; gap: 5px; margin-top: 15px; flex-wrap: wrap; }
         .pagination button { padding: 6px 12px; border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer; font-size: 13px; }
@@ -77,7 +98,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>📊 抽抽乐订单数据分析（待优化2026.8.1 23：58更新）</h1>
+            <h1>📊 抽抽乐订单数据分析（待优化2026.8.2更新）</h1>
             <p>上传Excel文件，自动生成数据分析报告</p>
         </div>
 
@@ -123,7 +144,7 @@
                     <h3>🎴 卡片统计明细</h3>
                     <span style="font-size:12px;color:#999;">共 <span id="cardTotalCount">0</span> 种卡片</span>
                 </div>
-                <div class="table-wrapper" style="max-height: 300px;">
+                <div class="table-wrapper">
                     <table id="cardStatsTable">
                         <thead>
                             <tr><th>卡片名称</th><th>卡片类型</th><th>抽取张数</th><th>涉及用户数</th></tr>
@@ -131,6 +152,7 @@
                         <tbody id="cardStatsBody"></tbody>
                     </table>
                 </div>
+                <div class="pagination" id="cardStatsPagination"></div>
             </div>
 
             <div class="table-section">
@@ -138,7 +160,7 @@
                     <h3>🌟 终极活动卡类型汇总（A/B/C/D/E/F）</h3>
                     <span style="font-size:12px;color:#999;">收官终极活动小卡统计</span>
                 </div>
-                <div class="table-wrapper" style="max-height: 200px;">
+                <div class="table-wrapper">
                     <table id="finalCardTypeStatsTable">
                         <thead>
                             <tr><th>卡类型</th><th>对应卡面</th><th>抽取张数</th><th>涉及用户数</th></tr>
@@ -153,7 +175,7 @@
                     <h3>🎁 活动小卡统计（限时小卡/浪漫疯子/周末活动）</h3>
                     <span style="font-size:12px;color:#999;">各活动获得小卡汇总</span>
                 </div>
-                <div class="table-wrapper" style="max-height: 200px;">
+                <div class="table-wrapper">
                     <table id="activityCardStatsTable">
                         <thead>
                             <tr><th>活动小卡类型</th><th>对应活动</th><th>发放张数</th><th>涉及用户数</th></tr>
@@ -172,7 +194,7 @@
                 <div class="table-header">
                     <h3>⏰ 活动期统计明细</h3>
                 </div>
-                <div class="table-wrapper" style="max-height: 200px;">
+                <div class="table-wrapper">
                     <table id="activityStatsTable">
                         <thead>
                             <tr><th>时间段</th><th>订单数</th><th>参与用户数</th><th>总抽数</th></tr>
@@ -201,10 +223,18 @@
                 </div>
                 <div class="table-wrapper">
                     <table id="userTable">
+                        <colgroup>
+                            <col class="col-account"><col class="col-phone"><col class="col-orders"><col class="col-orderno">
+                            <col class="col-items"><col class="col-draws"><col class="col-duanhe"><col class="col-milestone">
+                            <col class="col-allbonus"><col class="col-specialbonus"><col class="col-limited">
+                            <col class="col-paytime"><col class="col-romancedraws"><col class="col-romance">
+                            <col class="col-weekendraws"><col class="col-weekend"><col class="col-finaldraws"><col class="col-final">
+                        </colgroup>
                         <thead>
                             <tr>
                                 <th>下单账号</th><th>手机号</th><th>订单数</th><th>订单号</th><th>货品</th><th>总抽数</th>
                                 <th>是否端盒</th><th>个人满抽礼</th>
+                                <th>超like卡</th><th>全员特典</th>
                                 <th>限时小卡获得</th>
                                 <th>首次支付时间</th>
                                 <th>7.13-7.15抽数</th><th>浪漫疯子获得</th>
@@ -363,6 +393,7 @@
                 processData(allData);
                 renderRawData(allData);
                 renderCharts();
+                cardStatsPage = 1;
                 renderStatsTables();
                 filteredData = [...userData];
                 renderTable(1);
@@ -818,7 +849,7 @@
                         }
                     }
                 } else {
-                    weekendCondition = '未参与';
+                    weekendCondition = '';
                     weekendCardCount = 0;
                 }
 
@@ -972,7 +1003,7 @@
                         }
                     }
                 } else {
-                    finalCondition = '未参与';
+                    finalCondition = '';
                 }
 
                 // 详细小卡数量统计
@@ -1212,6 +1243,84 @@
                 u.isDuanhe = userMap.get(u.wechat)?.orderDraws?.some(o => o.isDuanhe) ? '是' : '否';
             });
 
+            // === 全员特典卡 & 特典卡 ===
+            // 收集所有订单按时间排序，追踪全活动累计抽数突破里程碑的时间
+            const campaignThresholds = [3000, 4000, 5170, 15170, 35170, 55170, 75170, 95170];
+            const campaignCrossingTimes = {};
+            const allOrderDraws = [];
+            userMap.forEach(user => {
+                if (user.orderDraws) {
+                    user.orderDraws.forEach(o => {
+                        if (o.time && o.time instanceof Date && !isNaN(o.time.getTime())) {
+                            allOrderDraws.push({ time: o.time, draws: o.draws });
+                        }
+                    });
+                }
+            });
+            allOrderDraws.sort((a, b) => a.time.getTime() - b.time.getTime());
+
+            let cumCampaignDraws = 0;
+            for (const od of allOrderDraws) {
+                cumCampaignDraws += od.draws;
+                for (const threshold of campaignThresholds) {
+                    if (cumCampaignDraws >= threshold && !campaignCrossingTimes[threshold]) {
+                        campaignCrossingTimes[threshold] = od.time;
+                    }
+                }
+            }
+            const totalCampaignDraws = cumCampaignDraws;
+
+            // 全员特典卡（满1抽获得，只有2张超like卡）
+            const allMemberCards = [];
+            if (totalCampaignDraws >= 3000) allMemberCards.push('超like破3000卡');
+            if (totalCampaignDraws >= 4000) allMemberCards.push('超like破4000卡');
+
+            // 特典卡（满10抽获得）
+            const ACTIVITY_30MIN_END = new Date(ACTIVITY_START.getTime() + 30 * 60 * 1000);
+            const ACTIVITY_1H_REAL_END = new Date(ACTIVITY_START.getTime() + 60 * 60 * 1000);
+            const ACTIVITY_6H_REAL_END = new Date(ACTIVITY_START.getTime() + 6 * 60 * 60 * 1000);
+
+            const specialBonusCards = [];
+            if (totalCampaignDraws >= 5170) {
+                specialBonusCards.push('破5170抽小卡');
+                if (campaignCrossingTimes[5170] && campaignCrossingTimes[5170] <= ACTIVITY_30MIN_END) {
+                    specialBonusCards.push('30min破5170抽加赠小卡');
+                }
+            }
+            if (totalCampaignDraws >= 15170) {
+                specialBonusCards.push('破15170抽小卡');
+                if (campaignCrossingTimes[15170] && campaignCrossingTimes[15170] <= ACTIVITY_1H_REAL_END) {
+                    specialBonusCards.push('1h破15170抽加赠小卡');
+                }
+            }
+            if (totalCampaignDraws >= 35170) {
+                specialBonusCards.push('破35170抽小卡');
+                if (campaignCrossingTimes[35170] && campaignCrossingTimes[35170] <= ACTIVITY_6H_REAL_END) {
+                    specialBonusCards.push('6h破35170抽加赠小卡');
+                }
+            }
+            if (totalCampaignDraws >= 55170) specialBonusCards.push('破55170抽小卡');
+            if (totalCampaignDraws >= 75170) specialBonusCards.push('破75170抽小卡');
+            if (totalCampaignDraws >= 95170) specialBonusCards.push('破95170抽小卡');
+
+            // 端盒SET内容
+            const duanheSetItems = [
+                'A4纸质卡册', '明信片×6', '小卡×9', '人生四格×1',
+                '贴纸页×6', '白瓷工艺小卡×1', '解锁全员特典', '解锁限时小卡'
+            ];
+            const duanheSetStr = '"唯你的长夏永不凋落"SET(' + duanheSetItems.join('+') + ')';
+
+            userData.forEach(u => {
+                // 全员特典（满1抽）
+                u.allMemberBonus = u.totalDraws >= 1 ? allMemberCards.join('、') : '';
+                // 特典卡（满10抽）
+                u.specialBonus = u.totalDraws >= 10 ? specialBonusCards.join('、') : '';
+                // 端盒SET追加到货品
+                if (u.isDuanhe === '是') {
+                    u.items = u.items ? u.items + '; ' + duanheSetStr : duanheSetStr;
+                }
+            });
+
             document.getElementById('totalUsers').textContent = userData.length.toLocaleString();
             document.getElementById('totalOrders').textContent = userData.reduce((sum, u) => sum + u.orderCount, 0).toLocaleString();
             document.getElementById('totalDraws').textContent = userData.reduce((sum, u) => sum + u.totalDraws, 0).toLocaleString();
@@ -1273,14 +1382,25 @@
             window.addEventListener('resize', () => { Object.values(charts).forEach(c => c.resize()); });
         }
 
-        function renderStatsTables() {
-            // 渲染卡片统计表格
+        let cardStatsPage = 1;
+        const CARD_PAGE_SIZE = 10;
+        
+        function renderCardStatsPage(page) {
+            const totalPages = Math.ceil(cardStats.length / CARD_PAGE_SIZE);
+            if (page < 1) page = 1;
+            if (page > totalPages) page = totalPages;
+            cardStatsPage = page;
+            
+            const start = (page - 1) * CARD_PAGE_SIZE;
+            const end = start + CARD_PAGE_SIZE;
+            const pageData = cardStats.slice(start, end);
+            
             const cardStatsBody = document.getElementById('cardStatsBody');
             const totalCardDraws = cardStats.reduce((sum, c) => sum + c.count, 0);
             const totalCardUsers = new Set();
             cardStats.forEach(c => c.users.forEach(u => totalCardUsers.add(u)));
             
-            cardStatsBody.innerHTML = cardStats.map(card => `
+            cardStatsBody.innerHTML = pageData.map(card => `
                 <tr>
                     <td>${card.cardName}</td>
                     <td>${card.cardType}</td>
@@ -1296,6 +1416,21 @@
                 </tr>
             `;
             document.getElementById('cardTotalCount').textContent = cardStats.length;
+            
+            // 渲染分页
+            const pagination = document.getElementById('cardStatsPagination');
+            if (totalPages <= 1) {
+                pagination.innerHTML = '';
+                return;
+            }
+            let html = `<button class="btn-sm" onclick="renderCardStatsPage(${page - 1})" ${page <= 1 ? 'disabled' : ''}>上一页</button>`;
+            html += `<span style="padding:0 8px;font-size:12px;color:#666;">第 ${page} / ${totalPages} 页 (共${cardStats.length}种卡片)</span>`;
+            html += `<button class="btn-sm" onclick="renderCardStatsPage(${page + 1})" ${page >= totalPages ? 'disabled' : ''}>下一页</button>`;
+            pagination.innerHTML = html;
+        }
+        
+        function renderStatsTables() {
+            renderCardStatsPage(cardStatsPage);
 
             // 渲染终极活动卡类型汇总表格
             const finalCardTypeStatsBody = document.getElementById('finalCardTypeStatsBody');
@@ -1384,7 +1519,7 @@
                     ? '<span style="background:#fef3c7;color:#d97706;padding:1px 6px;border-radius:4px;font-size:11px;">端盒</span>' 
                     : '<span style="color:#999;font-size:11px;">-</span>';
                 const milestoneBadge = user.milestoneRewards 
-                    ? `<span style="color:#667eea;font-size:11px;" title="${user.milestoneRewards}">${user.milestoneRewards.length > 30 ? user.milestoneRewards.slice(0,30)+'...' : user.milestoneRewards}</span>` 
+                    ? `<span style="color:#667eea;font-size:11px;word-break:break-all;white-space:normal;line-height:1.4;">${user.milestoneRewards}</span>` 
                     : '<span style="color:#999;font-size:11px;">-</span>';
                 
                 // 限时小卡详细显示
@@ -1429,6 +1564,15 @@
                     weekendDetail = '<span style="color:#999;font-size:11px;">-</span>';
                 }
                 
+                // 全员特典显示
+                const allMemberBadge = user.allMemberBonus 
+                    ? `<span style="color:#059669;font-size:11px;word-break:break-all;white-space:normal;line-height:1.4;">${user.allMemberBonus}</span>` 
+                    : '<span style="color:#999;font-size:11px;">-</span>';
+                // 特典卡显示
+                const specialBonusBadge = user.specialBonus 
+                    ? `<span style="color:#7c3aed;font-size:11px;word-break:break-all;white-space:normal;line-height:1.4;">${user.specialBonus}</span>` 
+                    : '<span style="color:#999;font-size:11px;">-</span>';
+                
                 return `
                 <tr>
                     <td>${user.wechat || ''}</td>
@@ -1439,6 +1583,8 @@
                     <td>${user.totalDraws || 0}</td>
                     <td>${isDuanheBadge}</td>
                     <td>${milestoneBadge}</td>
+                    <td>${allMemberBadge}</td>
+                    <td>${specialBonusBadge}</td>
                     <td style="white-space:nowrap;">${limitedDetail}</td>
                     <td>${user.firstPayTime || ''}</td>
                     <td>${user.romanceDraws || 0}</td>
@@ -1446,10 +1592,10 @@
                     <td>${user.weekendDraws || 0}</td>
                     <td style="white-space:nowrap;">${weekendDetail}</td>
                     <td>${user.finalDraws || 0}</td>
-                    <td style="max-width:200px;">${user.finalCondition || ''}</td>
+                    <td style="max-width:200px;">${user.finalCondition || '<span style="color:#999;font-size:11px;">-</span>'}</td>
                 </tr>
             `;
-            }).join('') : '<tr><td colspan="16" style="text-align:center;color:#999;">暂无数据</td></tr>';
+            }).join('') : '<tr><td colspan="18" style="text-align:center;color:#999;">暂无数据</td></tr>';
 
             const totalPages = Math.ceil(filteredData.length / pageSize);
             const pagination = document.getElementById('pagination');
@@ -1512,10 +1658,11 @@
         }
 
         function exportUserSheet() {
-            const headers = ['下单账号', '手机号', '订单数', '订单号', '货品', '总抽数', '是否端盒', '个人满抽礼', '限时小卡1', '限时小卡2', '限时小卡3', '首次支付时间', '满10抽时间', '限时小卡获得情况', '0-1小时抽数', '1-6小时抽数', '6-24小时抽数', '7.13-7.15抽数', '浪漫疯子随机', '浪漫疯子不重复', '7.18-7.20抽数', '周末随机', '周末不重复', '终极活动抽数', '终极活动有效抽数(端盒381)', '镜头签数量', '周正小卡数量', '开推制服小卡数量', '终极活动套数', '终极活动获得情况'];
+            const headers = ['下单账号', '手机号', '订单数', '订单号', '货品', '总抽数', '是否端盒', '个人满抽礼', '全员特典', '特典卡', '限时小卡1', '限时小卡2', '限时小卡3', '首次支付时间', '满10抽时间', '限时小卡获得情况', '0-1小时抽数', '1-6小时抽数', '6-24小时抽数', '7.13-7.15抽数', '浪漫疯子随机', '浪漫疯子不重复', '7.18-7.20抽数', '周末随机', '周末不重复', '终极活动抽数', '终极活动有效抽数(端盒381)', '镜头签数量', '周正小卡数量', '开推制服小卡数量', '终极活动套数', '终极活动获得情况'];
             const data = filteredData.map(u => [
                 u.wechat || '', u.phone || '', u.orderCount || 0, u.orderNos || '', u.items || '',
                 u.totalDraws || 0, u.isDuanhe || '否', u.milestoneRewards || '',
+                u.allMemberBonus || '', u.specialBonus || '',
                 u.limited1Count || 0, u.limited2Count || 0, u.limited3Count || 0,
                 u.firstPayTime || '', u.full10Time || '', u.limitedCards || '',
                 u.activity0_1h || 0, u.activity1_6h || 0, u.activity6_24h || 0,
@@ -1588,7 +1735,7 @@
         }
 
         function exportLaibaoSheet() {
-            const headers = ['查询码（手机号）', '下单账号', '总抽数', '是否端盒', '限时小卡获得', '浪漫疯子获得', '周末活动获得', '获得卡片', '个人满抽礼'];
+            const headers = ['查询码（手机号）', '下单账号', '总抽数', '是否端盒', '超like卡', '全员特典', '限时小卡获得', '浪漫疯子获得', '周末活动获得', '终极活动获得', '获得卡片', '个人满抽礼'];
             const data = filteredData.map(u => {
                 // 限时小卡文字描述
                 const limitedParts = [];
@@ -1597,16 +1744,16 @@
                 if (u.limited3Count > 0) limitedParts.push('限时3×' + u.limited3Count);
                 const limitedStr = limitedParts.length > 0 ? limitedParts.join('、') : (u.limitedCards === '未满10抽' ? '未满10抽' : '-');
                 
-                // 浪漫疯子文字描述
+                // 浪漫疯子文字描述（加上"浪漫"前缀）
                 const romanceParts = [];
-                if (u.romanceRandomCount > 0) romanceParts.push('随机×' + u.romanceRandomCount);
-                if (u.romanceUniqueCount > 0) romanceParts.push('不重复×' + u.romanceUniqueCount);
+                if (u.romanceRandomCount > 0) romanceParts.push('浪漫随机×' + u.romanceRandomCount);
+                if (u.romanceUniqueCount > 0) romanceParts.push('浪漫不重复×' + u.romanceUniqueCount);
                 const romanceStr = romanceParts.length > 0 ? romanceParts.join('、') : (u.romanceCondition?.includes('未达标') ? '未达标' : '-');
                 
-                // 周末活动文字描述
+                // 周末活动文字描述（加上"周末"前缀）
                 const weekendParts = [];
-                if (u.weekendRandomCount > 0) weekendParts.push('随机×' + u.weekendRandomCount);
-                if (u.weekendUniqueCount > 0) weekendParts.push('不重复×' + u.weekendUniqueCount);
+                if (u.weekendRandomCount > 0) weekendParts.push('周末随机×' + u.weekendRandomCount);
+                if (u.weekendUniqueCount > 0) weekendParts.push('周末不重复×' + u.weekendUniqueCount);
                 const weekendStr = weekendParts.length > 0 ? weekendParts.join('、') : (u.weekendCondition?.includes('未达标') ? '未达标' : '-');
                 
                 return [
@@ -1614,9 +1761,12 @@
                     u.wechat || '',
                     u.totalDraws || 0,
                     u.isDuanhe || '否',
+                    u.allMemberBonus || '-',
+                    u.specialBonus || '-',
                     limitedStr,
                     romanceStr,
                     weekendStr,
+                    u.finalCondition || '-',
                     u.items || '',
                     u.milestoneRewards || ''
                 ];
