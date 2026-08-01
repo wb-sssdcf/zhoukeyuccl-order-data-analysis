@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>抽抽乐订单数据分析（待优化2026.7.27 22：36更新）</title>
+    <title>抽抽乐订单数据分析（待优化2026.8.1 23：02更新）</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <style>
@@ -77,7 +77,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>📊 抽抽乐订单数据分析（待优化2026.7.27 22：36更新）</h1>
+            <h1>📊 抽抽乐订单数据分析（待优化2026.8.1 23：00更新）</h1>
             <p>上传Excel文件，自动生成数据分析报告</p>
         </div>
 
@@ -202,8 +202,9 @@
                     <table id="userTable">
                         <thead>
                             <tr>
-                                <th>下单账号</th><th>手机号</th><th>订单数</th><th>订单号</th><th>总抽数</th><th>首次支付时间</th>
-                                <th>满10抽时间</th><th>限时小卡123</th>
+                                <th>下单账号</th><th>手机号</th><th>订单数</th><th>订单号</th><th>货品</th><th>总抽数</th>
+                                <th>是否端盒</th><th>个人满抽礼</th>
+                                <th>首次支付时间</th>
                                 <th>7.13-7.15抽数</th><th>浪漫疯子获得</th>
                                 <th>7.18-7.20抽数</th><th>周末活动获得</th>
                                 <th>终极活动抽数</th><th>终极活动获得</th>
@@ -1157,8 +1158,30 @@
             });
             activityStats.forEach(stat => stat.userCount = stat.users.size);
 
-            const milestones = [10, 20, 30, 40, 50, 66, 88, 100, 120];
+            const milestones = [10, 20, 30, 40, 50, 66, 88, 100, 120, 150, 180, 200, 240];
             milestoneStats = milestones.map(m => ({ milestone: m, count: userData.filter(u => u.totalDraws >= m).length, rate: ((userData.filter(u => u.totalDraws >= m).length / userData.length) * 100).toFixed(1) + '%' }));
+
+            // 个人满抽礼映射
+            const milestoneRewardMap = {
+                10: '等比例长大小卡×2',
+                20: '陆西骁卡通贴纸',
+                30: '光栅小卡×1',
+                40: '白瓷工艺小卡',
+                50: '烫色签名拍立得',
+                66: '陆西骁淋浴反转胶片',
+                88: '亚克力A5卡册',
+                100: '可拆卸MNI PB',
+                120: '陆西骁金属徽章',
+                150: 'mini PB',
+                200: 'mini PB复数1份',
+                240: 'mini PB复数2份'
+            };
+            userData.forEach(u => {
+                const achievedMilestones = milestones.filter(m => u.totalDraws >= m);
+                const rewards = achievedMilestones.map(m => milestoneRewardMap[m]).filter(Boolean);
+                u.milestoneRewards = rewards.join(' + ');
+                u.isDuanhe = userMap.get(u.wechat)?.orderDraws?.some(o => o.isDuanhe) ? '是' : '否';
+            });
 
             document.getElementById('totalUsers').textContent = userData.length.toLocaleString();
             document.getElementById('totalOrders').textContent = userData.reduce((sum, u) => sum + u.orderCount, 0).toLocaleString();
@@ -1327,16 +1350,24 @@
             const pageData = filteredData.slice(start, end);
 
             const tbody = document.getElementById('userTableBody');
-            tbody.innerHTML = pageData.length > 0 ? pageData.map(user => `
+            tbody.innerHTML = pageData.length > 0 ? pageData.map(user => {
+                const isDuanheBadge = user.isDuanhe === '是' 
+                    ? '<span style="background:#fef3c7;color:#d97706;padding:1px 6px;border-radius:4px;font-size:11px;">端盒</span>' 
+                    : '<span style="color:#999;font-size:11px;">-</span>';
+                const milestoneBadge = user.milestoneRewards 
+                    ? `<span style="color:#667eea;font-size:11px;" title="${user.milestoneRewards}">${user.milestoneRewards.length > 30 ? user.milestoneRewards.slice(0,30)+'...' : user.milestoneRewards}</span>` 
+                    : '<span style="color:#999;font-size:11px;">-</span>';
+                return `
                 <tr>
                     <td>${user.wechat || ''}</td>
                     <td>${user.phone || ''}</td>
                     <td>${user.orderCount || 0}</td>
                     <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${user.orderNos || ''}">${user.orderNos || ''}</td>
+                    <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${user.items || ''}">${user.items || ''}</td>
                     <td>${user.totalDraws || 0}</td>
+                    <td>${isDuanheBadge}</td>
+                    <td>${milestoneBadge}</td>
                     <td>${user.firstPayTime || ''}</td>
-                    <td>${user.full10Time || ''}</td>
-                    <td>${user.limitedCards || ''}</td>
                     <td>${user.romanceDraws || 0}</td>
                     <td>${user.romanceCondition || ''}</td>
                     <td>${user.weekendDraws || 0}</td>
@@ -1344,7 +1375,8 @@
                     <td>${user.finalDraws || 0}</td>
                     <td>${user.finalCondition || ''}</td>
                 </tr>
-            `).join('') : '<tr><td colspan="14" style="text-align:center;color:#999;">暂无数据</td></tr>';
+            `;
+            }).join('') : '<tr><td colspan="15" style="text-align:center;color:#999;">暂无数据</td></tr>';
 
             const totalPages = Math.ceil(filteredData.length / pageSize);
             const pagination = document.getElementById('pagination');
@@ -1407,10 +1439,11 @@
         }
 
         function exportUserSheet() {
-            const headers = ['下单账号', '手机号', '订单数', '订单号', '货品', '总抽数', '首次支付时间', '满10抽时间', '限时小卡123获得情况', '0-1小时抽数', '1-6小时抽数', '6-24小时抽数', '7.13-7.15抽数', '浪漫疯子获得情况', '7.18-7.20抽数', '周末活动获得情况', '周末活动获得张数', '终极活动抽数', '终极活动有效抽数(端盒381)', '镜头签数量', '周正小卡数量', '开推制服小卡数量', '终极活动套数', '终极活动获得情况'];
+            const headers = ['下单账号', '手机号', '订单数', '订单号', '货品', '总抽数', '是否端盒', '个人满抽礼', '首次支付时间', '满10抽时间', '限时小卡123获得情况', '0-1小时抽数', '1-6小时抽数', '6-24小时抽数', '7.13-7.15抽数', '浪漫疯子获得情况', '7.18-7.20抽数', '周末活动获得情况', '周末活动获得张数', '终极活动抽数', '终极活动有效抽数(端盒381)', '镜头签数量', '周正小卡数量', '开推制服小卡数量', '终极活动套数', '终极活动获得情况'];
             const data = filteredData.map(u => [
                 u.wechat || '', u.phone || '', u.orderCount || 0, u.orderNos || '', u.items || '',
-                u.totalDraws || 0, u.firstPayTime || '', u.full10Time || '', u.limitedCards || '',
+                u.totalDraws || 0, u.isDuanhe || '否', u.milestoneRewards || '',
+                u.firstPayTime || '', u.full10Time || '', u.limitedCards || '',
                 u.activity0_1h || 0, u.activity1_6h || 0, u.activity6_24h || 0,
                 u.romanceDraws || 0, u.romanceCondition || '',
                 u.weekendDraws || 0, u.weekendCondition || '', u.weekendCardCount || 0,
