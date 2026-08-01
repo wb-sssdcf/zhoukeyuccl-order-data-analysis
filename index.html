@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>抽抽乐订单数据分析（待优化2026.8.1 23：02更新）</title>
+    <title>抽抽乐订单数据分析（待优化2026.8.1 23：14更新）</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <style>
@@ -77,7 +77,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>📊 抽抽乐订单数据分析（待优化2026.8.1 23：00更新）</h1>
+            <h1>📊 抽抽乐订单数据分析（待优化2026.8.1 23：14更新）</h1>
             <p>上传Excel文件，自动生成数据分析报告</p>
         </div>
 
@@ -1170,11 +1170,9 @@
                 50: '烫色签名拍立得',
                 66: '陆西骁淋浴反转胶片',
                 88: '亚克力A5卡册',
-                100: '可拆卸MNI PB',
+                100: 'mini PB 1',
                 120: '陆西骁金属徽章',
-                150: 'mini PB',
-                200: 'mini PB复数1份',
-                240: 'mini PB复数2份'
+                200: 'mini PB 2（复数）'
             };
             userData.forEach(u => {
                 const achievedMilestones = milestones.filter(m => u.totalDraws >= m);
