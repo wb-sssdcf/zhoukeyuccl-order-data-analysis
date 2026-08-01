@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>抽抽乐订单数据分析（待优化2026.8.1 23：14更新）</title>
+    <title>抽抽乐订单数据分析（待优化2026.8.1 23：58更新）</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <style>
@@ -77,7 +77,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>📊 抽抽乐订单数据分析（待优化2026.8.1 23：14更新）</h1>
+            <h1>📊 抽抽乐订单数据分析（待优化2026.8.1 23：58更新）</h1>
             <p>上传Excel文件，自动生成数据分析报告</p>
         </div>
 
@@ -195,6 +195,7 @@
                             <option value="card">卡片统计</option>
                             <option value="activity">活动期统计</option>
                             <option value="milestone">满赠达标统计</option>
+                            <option value="laibao">来豹接龙查询表</option>
                         </select>
                     </div>
                 </div>
@@ -204,6 +205,7 @@
                             <tr>
                                 <th>下单账号</th><th>手机号</th><th>订单数</th><th>订单号</th><th>货品</th><th>总抽数</th>
                                 <th>是否端盒</th><th>个人满抽礼</th>
+                                <th>限时小卡获得</th>
                                 <th>首次支付时间</th>
                                 <th>7.13-7.15抽数</th><th>浪漫疯子获得</th>
                                 <th>7.18-7.20抽数</th><th>周末活动获得</th>
@@ -553,10 +555,9 @@
 
                 const isRomancePeriod = payTime && payTime >= ROMANCE_START && payTime <= ROMANCE_END;
                 
-                // 计算有效抽数：奖品数 + 端盒数*382
-                // 先统计奖品数量（从赠品里来的cardData会统计）
-                // 这里先记端盒的抽数，奖品抽数后面在userMap里累计
-                const duanheDraws = duanheCount * 382;
+                // 计算有效抽数：端盒总抽数381（含6张奖品）
+                // 基础抽数 = 381 - 6张奖品 = 375，奖品在下面循环中各加1抽
+                const duanheDraws = duanheCount * 375;
                 
                 // 只记录有效订单（有奖品或端盒）
                 if (isValidOrder) {
@@ -570,7 +571,7 @@
                         const namePart = item.split('[购买数量:')[0].trim();
                         const qty = parseInt(item.split('[购买数量:')[1].replace(']', '').trim()) || 1;
                         if (namePart.includes('盲盒商品')) return;
-                        // 跳过端盒商品（端盒是382张打包，不统计到单张卡片里）
+                        // 跳过端盒商品（端盒是381张打包，不统计到单张卡片里）
                         if (namePart.includes('端盒') || namePart.includes('一键端盒')) return;
 
                         let cardName = namePart
@@ -660,12 +661,24 @@
                 if (!user.phone && order.phone) user.phone = order.phone;
                 if (order.payTime) user.payTimes.push(order.payTime);
                 
-                // 端盒订单：加382抽
+                // 端盒订单：加382抽 + 端盒奖品
                 if (order.isDuanhe && order.itemCount > 0) {
                     user.totalDraws += order.itemCount;
+                    // 端盒奖品：镜头签A/B/C + 周正小卡D/E + 开推制服F
+                    const duanhePrizes = ['镜头签A', '镜头签B', '镜头签C', '惊喜加赠D', '惊喜加赠E', '惊喜加赠F'];
+                    duanhePrizes.forEach(prize => {
+                        user.cards.push(prize);
+                        user.totalDraws++;
+                        if (order.isRomancePeriod) user.romanceDraws++;
+                        if (order.payTime && order.payTime >= WEEKEND_START && order.payTime <= WEEKEND_END) {
+                            user.weekendDraws++;
+                        }
+                        if (order.payTime && order.payTime >= FINAL_START && order.payTime <= FINAL_END) {
+                            user.finalDraws++;
+                        }
+                    });
                     if (order.isRomancePeriod) {
                         user.romanceOrders++;
-                        user.romanceDraws += order.itemCount;
                     }
                     // 活动期抽数
                     const t = order.payTime;
@@ -810,13 +823,8 @@
                 }
 
                 // 收官终极活动（7.25 12:00 ~ 7.31 17:17）
-                // 端盒算381抽
+                // 端盒算381抽（已统一）
                 let finalEffectiveDraws = user.finalDraws;
-                // 端盒需要换算：原来是382，改成381
-                const finalDuanheOrderDraws = user.orderDraws.filter(o => 
-                    o.isDuanhe && o.time >= FINAL_START && o.time <= FINAL_END
-                );
-                finalEffectiveDraws = finalEffectiveDraws - finalDuanheOrderDraws.reduce((sum, o) => sum + o.draws, 0) + finalDuanheOrderDraws.reduce((sum, o) => sum + 381, 0);
                 
                 let finalJingtouqian = 0; // 镜头签（A/B/C）
                 let finalZhouzheng = 0; // 周正小卡（D/E）
@@ -967,6 +975,33 @@
                     finalCondition = '未参与';
                 }
 
+                // 详细小卡数量统计
+                // 限时小卡
+                let limited1Count = 0, limited2Count = 0, limited3Count = 0;
+                if (limitedCards === '小卡1、小卡2、小卡3') {
+                    limited1Count = 1; limited2Count = 1; limited3Count = 1;
+                } else if (limitedCards === '小卡2、小卡3') {
+                    limited2Count = 1; limited3Count = 1;
+                } else if (limitedCards === '小卡3') {
+                    limited3Count = 1;
+                }
+
+                // 浪漫疯子小卡（二选一：随机1张 或 不重复2张）
+                let romanceRandomCount = 0, romanceUniqueCount = 0;
+                if (romanceCondition.includes('得两张')) {
+                    romanceUniqueCount = 2;  // 不重复2张
+                } else if (romanceCondition.includes('得一张')) {
+                    romanceRandomCount = 1;  // 随机1张
+                }
+
+                // 周末小卡（二选一：随机1张 或 不重复2张）
+                let weekendRandomCount = 0, weekendUniqueCount = 0;
+                if (weekendCondition.includes('得2张') || weekendCondition.includes('赠2张')) {
+                    weekendUniqueCount = 2;  // 不重复2张
+                } else if (weekendCondition.includes('得1张') || weekendCondition.includes('赠1张')) {
+                    weekendRandomCount = 1;  // 随机1张
+                }
+
                 // 有效订单数 = 有奖品的订单数 + 端盒订单数
                 const validOrderCount = user.orders.size; // 现在orders里只有有效订单
                 
@@ -976,11 +1011,14 @@
                     firstPayTime: firstPayTime ? formatDate(firstPayTime) : '',
                     full10Time: full10Time ? formatDate(full10Time) : '', earlyBirdReward,
                     limitedCards,
+                    limited1Count, limited2Count, limited3Count,
                     activity0_1h: user.activityDraws['0-1小时'], activity1_6h: user.activityDraws['1-6小时'],
                     activity6_24h: user.activityDraws['6-24小时'], romanceDraws: user.romanceDraws,
                     romanceOrders: user.romanceOrders, isFirstTimeBuyer: isFirstTimeFinal ? '是' : '否',
                     romanceCardCount: uniqueCards.filter(c => c.includes('浪漫疯子')).length, romanceCondition,
+                    romanceRandomCount, romanceUniqueCount,
                     weekendDraws: user.weekendDraws, weekendCardCount, weekendCondition,
+                    weekendRandomCount, weekendUniqueCount,
                     finalDraws: user.finalDraws, finalEffectiveDraws, finalJingtouqian, finalZhouzheng, finalKaitui, finalSetCount, finalCondition,
                     cardsBefore10: cardsBefore10.join(';'), cardList: uniqueCards.join(';')
                 });
@@ -1048,7 +1086,7 @@
             });
 
             // 活动小卡统计（限时小卡123、浪漫疯子、周末活动）
-            // 细分到具体小卡编号，并区分随机和确定不重复
+            // 使用新的详细字段进行统计
             const activityCardMap = new Map();
             ['限时小卡1', '限时小卡2', '限时小卡3', 
              '浪漫疯子随机', '浪漫疯子不重复', 
@@ -1058,35 +1096,28 @@
             
             userData.forEach(user => {
                 // 限时小卡统计
-                const limitedCardsStr = user.limitedCards || '';
-                if (limitedCardsStr.includes('小卡1')) {
-                    const stat = activityCardMap.get('限时小卡1'); stat.count++; stat.users.add(user.wechat);
+                if (user.limited1Count > 0) {
+                    const stat = activityCardMap.get('限时小卡1'); stat.count += user.limited1Count; stat.users.add(user.wechat);
                 }
-                if (limitedCardsStr.includes('小卡2')) {
-                    const stat = activityCardMap.get('限时小卡2'); stat.count++; stat.users.add(user.wechat);
+                if (user.limited2Count > 0) {
+                    const stat = activityCardMap.get('限时小卡2'); stat.count += user.limited2Count; stat.users.add(user.wechat);
                 }
-                if (limitedCardsStr.includes('小卡3')) {
-                    const stat = activityCardMap.get('限时小卡3'); stat.count++; stat.users.add(user.wechat);
+                if (user.limited3Count > 0) {
+                    const stat = activityCardMap.get('限时小卡3'); stat.count += user.limited3Count; stat.users.add(user.wechat);
                 }
                 // 浪漫疯子小卡统计（区分随机和确定不重复）
-                const romanceCondition = user.romanceCondition || '';
-                if (romanceCondition.includes('得两张')) {
-                    // 10抽或20抽：第一张随机，第二张不重复
-                    const stat1 = activityCardMap.get('浪漫疯子随机'); stat1.count++; stat1.users.add(user.wechat);
-                    const stat2 = activityCardMap.get('浪漫疯子不重复'); stat2.count++; stat2.users.add(user.wechat);
-                } else if (romanceCondition.includes('得一张')) {
-                    // 6抽或12抽：只有随机1张
-                    const stat = activityCardMap.get('浪漫疯子随机'); stat.count++; stat.users.add(user.wechat);
+                if (user.romanceRandomCount > 0) {
+                    const stat = activityCardMap.get('浪漫疯子随机'); stat.count += user.romanceRandomCount; stat.users.add(user.wechat);
+                }
+                if (user.romanceUniqueCount > 0) {
+                    const stat = activityCardMap.get('浪漫疯子不重复'); stat.count += user.romanceUniqueCount; stat.users.add(user.wechat);
                 }
                 // 周末活动小卡统计（区分随机和确定不重复）
-                const weekendCondition = user.weekendCondition || '';
-                if (weekendCondition.includes('得2张') || weekendCondition.includes('赠2张')) {
-                    // 高抽数满300抽赠2张不重复，或活动期抽10/20抽得两张不重复
-                    const stat1 = activityCardMap.get('周末随机'); stat1.count++; stat1.users.add(user.wechat);
-                    const stat2 = activityCardMap.get('周末不重复'); stat2.count++; stat2.users.add(user.wechat);
-                } else if (weekendCondition.includes('得1张') || weekendCondition.includes('赠1张')) {
-                    // 高抽数满210抽赠1张随机，或活动期抽6/12抽得一张随机
-                    const stat = activityCardMap.get('周末随机'); stat.count++; stat.users.add(user.wechat);
+                if (user.weekendRandomCount > 0) {
+                    const stat = activityCardMap.get('周末随机'); stat.count += user.weekendRandomCount; stat.users.add(user.wechat);
+                }
+                if (user.weekendUniqueCount > 0) {
+                    const stat = activityCardMap.get('周末不重复'); stat.count += user.weekendUniqueCount; stat.users.add(user.wechat);
                 }
             });
             activityCardStats = Array.from(activityCardMap.values()).sort((a, b) => {
@@ -1355,6 +1386,49 @@
                 const milestoneBadge = user.milestoneRewards 
                     ? `<span style="color:#667eea;font-size:11px;" title="${user.milestoneRewards}">${user.milestoneRewards.length > 30 ? user.milestoneRewards.slice(0,30)+'...' : user.milestoneRewards}</span>` 
                     : '<span style="color:#999;font-size:11px;">-</span>';
+                
+                // 限时小卡详细显示
+                let limitedDetail = '-';
+                if (user.limitedCards && user.limitedCards !== '无' && user.limitedCards !== '未满10抽') {
+                    const parts = [];
+                    if (user.limited1Count > 0) parts.push('<span style="background:#dbeafe;color:#2563eb;padding:1px 5px;border-radius:3px;font-size:10px;margin:1px;">限时1×' + user.limited1Count + '</span>');
+                    if (user.limited2Count > 0) parts.push('<span style="background:#dbeafe;color:#2563eb;padding:1px 5px;border-radius:3px;font-size:10px;margin:1px;">限时2×' + user.limited2Count + '</span>');
+                    if (user.limited3Count > 0) parts.push('<span style="background:#dbeafe;color:#2563eb;padding:1px 5px;border-radius:3px;font-size:10px;margin:1px;">限时3×' + user.limited3Count + '</span>');
+                    limitedDetail = parts.join('');
+                } else if (user.limitedCards === '未满10抽') {
+                    limitedDetail = '<span style="color:#999;font-size:11px;">未满10抽</span>';
+                }
+                
+                // 浪漫疯子详细显示
+                let romanceDetail = '-';
+                if (user.romanceRandomCount > 0 || user.romanceUniqueCount > 0) {
+                    const parts = [];
+                    if (user.romanceRandomCount > 0) parts.push('<span style="background:#fce7f3;color:#db2777;padding:1px 5px;border-radius:3px;font-size:10px;margin:1px;">浪漫随机×' + user.romanceRandomCount + '</span>');
+                    if (user.romanceUniqueCount > 0) parts.push('<span style="background:#fce7f3;color:#db2777;padding:1px 5px;border-radius:3px;font-size:10px;margin:1px;">浪漫不重复×' + user.romanceUniqueCount + '</span>');
+                    romanceDetail = parts.join('');
+                } else if (user.romanceCondition && user.romanceCondition.includes('未达标')) {
+                    romanceDetail = '<span style="color:#999;font-size:11px;">未达标</span>';
+                } else if (user.romanceDraws === 0) {
+                    romanceDetail = '<span style="color:#999;font-size:11px;">-</span>';
+                } else {
+                    romanceDetail = '<span style="color:#999;font-size:11px;">-</span>';
+                }
+                
+                // 周末详细显示
+                let weekendDetail = '-';
+                if (user.weekendRandomCount > 0 || user.weekendUniqueCount > 0) {
+                    const parts = [];
+                    if (user.weekendRandomCount > 0) parts.push('<span style="background:#fef3c7;color:#d97706;padding:1px 5px;border-radius:3px;font-size:10px;margin:1px;">周末随机×' + user.weekendRandomCount + '</span>');
+                    if (user.weekendUniqueCount > 0) parts.push('<span style="background:#fef3c7;color:#d97706;padding:1px 5px;border-radius:3px;font-size:10px;margin:1px;">周末不重复×' + user.weekendUniqueCount + '</span>');
+                    weekendDetail = parts.join('');
+                } else if (user.weekendCondition && user.weekendCondition.includes('未达标')) {
+                    weekendDetail = '<span style="color:#999;font-size:11px;">未达标</span>';
+                } else if (user.weekendDraws === 0) {
+                    weekendDetail = '<span style="color:#999;font-size:11px;">-</span>';
+                } else {
+                    weekendDetail = '<span style="color:#999;font-size:11px;">-</span>';
+                }
+                
                 return `
                 <tr>
                     <td>${user.wechat || ''}</td>
@@ -1365,16 +1439,17 @@
                     <td>${user.totalDraws || 0}</td>
                     <td>${isDuanheBadge}</td>
                     <td>${milestoneBadge}</td>
+                    <td style="white-space:nowrap;">${limitedDetail}</td>
                     <td>${user.firstPayTime || ''}</td>
                     <td>${user.romanceDraws || 0}</td>
-                    <td>${user.romanceCondition || ''}</td>
+                    <td style="white-space:nowrap;">${romanceDetail}</td>
                     <td>${user.weekendDraws || 0}</td>
-                    <td>${user.weekendCondition || ''}</td>
+                    <td style="white-space:nowrap;">${weekendDetail}</td>
                     <td>${user.finalDraws || 0}</td>
-                    <td>${user.finalCondition || ''}</td>
+                    <td style="max-width:200px;">${user.finalCondition || ''}</td>
                 </tr>
             `;
-            }).join('') : '<tr><td colspan="15" style="text-align:center;color:#999;">暂无数据</td></tr>';
+            }).join('') : '<tr><td colspan="16" style="text-align:center;color:#999;">暂无数据</td></tr>';
 
             const totalPages = Math.ceil(filteredData.length / pageSize);
             const pagination = document.getElementById('pagination');
@@ -1437,14 +1512,15 @@
         }
 
         function exportUserSheet() {
-            const headers = ['下单账号', '手机号', '订单数', '订单号', '货品', '总抽数', '是否端盒', '个人满抽礼', '首次支付时间', '满10抽时间', '限时小卡123获得情况', '0-1小时抽数', '1-6小时抽数', '6-24小时抽数', '7.13-7.15抽数', '浪漫疯子获得情况', '7.18-7.20抽数', '周末活动获得情况', '周末活动获得张数', '终极活动抽数', '终极活动有效抽数(端盒381)', '镜头签数量', '周正小卡数量', '开推制服小卡数量', '终极活动套数', '终极活动获得情况'];
+            const headers = ['下单账号', '手机号', '订单数', '订单号', '货品', '总抽数', '是否端盒', '个人满抽礼', '限时小卡1', '限时小卡2', '限时小卡3', '首次支付时间', '满10抽时间', '限时小卡获得情况', '0-1小时抽数', '1-6小时抽数', '6-24小时抽数', '7.13-7.15抽数', '浪漫疯子随机', '浪漫疯子不重复', '7.18-7.20抽数', '周末随机', '周末不重复', '终极活动抽数', '终极活动有效抽数(端盒381)', '镜头签数量', '周正小卡数量', '开推制服小卡数量', '终极活动套数', '终极活动获得情况'];
             const data = filteredData.map(u => [
                 u.wechat || '', u.phone || '', u.orderCount || 0, u.orderNos || '', u.items || '',
                 u.totalDraws || 0, u.isDuanhe || '否', u.milestoneRewards || '',
+                u.limited1Count || 0, u.limited2Count || 0, u.limited3Count || 0,
                 u.firstPayTime || '', u.full10Time || '', u.limitedCards || '',
                 u.activity0_1h || 0, u.activity1_6h || 0, u.activity6_24h || 0,
-                u.romanceDraws || 0, u.romanceCondition || '',
-                u.weekendDraws || 0, u.weekendCondition || '', u.weekendCardCount || 0,
+                u.romanceDraws || 0, u.romanceRandomCount || 0, u.romanceUniqueCount || 0,
+                u.weekendDraws || 0, u.weekendRandomCount || 0, u.weekendUniqueCount || 0,
                 u.finalDraws || 0, u.finalEffectiveDraws || 0,
                 u.finalJingtouqian || 0, u.finalZhouzheng || 0, u.finalKaitui || 0,
                 u.finalSetCount || 0, u.finalCondition || ''
@@ -1511,6 +1587,43 @@
             return XLSX.utils.aoa_to_sheet([headers, ...data]);
         }
 
+        function exportLaibaoSheet() {
+            const headers = ['查询码（手机号）', '下单账号', '总抽数', '是否端盒', '限时小卡获得', '浪漫疯子获得', '周末活动获得', '获得卡片', '个人满抽礼'];
+            const data = filteredData.map(u => {
+                // 限时小卡文字描述
+                const limitedParts = [];
+                if (u.limited1Count > 0) limitedParts.push('限时1×' + u.limited1Count);
+                if (u.limited2Count > 0) limitedParts.push('限时2×' + u.limited2Count);
+                if (u.limited3Count > 0) limitedParts.push('限时3×' + u.limited3Count);
+                const limitedStr = limitedParts.length > 0 ? limitedParts.join('、') : (u.limitedCards === '未满10抽' ? '未满10抽' : '-');
+                
+                // 浪漫疯子文字描述
+                const romanceParts = [];
+                if (u.romanceRandomCount > 0) romanceParts.push('随机×' + u.romanceRandomCount);
+                if (u.romanceUniqueCount > 0) romanceParts.push('不重复×' + u.romanceUniqueCount);
+                const romanceStr = romanceParts.length > 0 ? romanceParts.join('、') : (u.romanceCondition?.includes('未达标') ? '未达标' : '-');
+                
+                // 周末活动文字描述
+                const weekendParts = [];
+                if (u.weekendRandomCount > 0) weekendParts.push('随机×' + u.weekendRandomCount);
+                if (u.weekendUniqueCount > 0) weekendParts.push('不重复×' + u.weekendUniqueCount);
+                const weekendStr = weekendParts.length > 0 ? weekendParts.join('、') : (u.weekendCondition?.includes('未达标') ? '未达标' : '-');
+                
+                return [
+                    u.phone || '',
+                    u.wechat || '',
+                    u.totalDraws || 0,
+                    u.isDuanhe || '否',
+                    limitedStr,
+                    romanceStr,
+                    weekendStr,
+                    u.items || '',
+                    u.milestoneRewards || ''
+                ];
+            });
+            return XLSX.utils.aoa_to_sheet([headers, ...data]);
+        }
+
         function exportExcel(type) {
             const workbook = XLSX.utils.book_new();
             
@@ -1534,6 +1647,9 @@
             } else if (type === 'milestone') {
                 XLSX.utils.book_append_sheet(workbook, exportMilestoneSheet(), '满赠达标统计');
                 XLSX.writeFile(workbook, getTimestampFilename('抽抽乐数据分析_满赠达标'));
+            } else if (type === 'laibao') {
+                XLSX.utils.book_append_sheet(workbook, exportLaibaoSheet(), '来豹接龙查询表');
+                XLSX.writeFile(workbook, getTimestampFilename('抽抽乐_来豹接龙查询表'));
             }
         }
 
