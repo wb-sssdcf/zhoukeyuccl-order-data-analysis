@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>抽抽乐订单数据分析（待优化2026.8.2 更新）</title>
+    <title>抽抽乐订单数据分析（待优化2026.8.2 11：40更新）</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <style>
@@ -64,6 +64,7 @@
         #userTable col.col-milestone { width: 200px; }
         #userTable col.col-allbonus { width: 110px; }
         #userTable col.col-specialbonus { width: 110px; }
+        #userTable col.col-xuanchuan { width: 100px; }
         #userTable col.col-limited { width: 110px; }
         #userTable col.col-paytime { width: 130px; }
         #userTable col.col-romancedraws { width: 70px; }
@@ -98,7 +99,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>📊 抽抽乐订单数据分析（待优化2026.8.2更新）</h1>
+            <h1>📊 抽抽乐订单数据分析（待优化2026.8.2 11：40更新）</h1>
             <p>上传Excel文件，自动生成数据分析报告</p>
         </div>
 
@@ -226,7 +227,8 @@
                         <colgroup>
                             <col class="col-account"><col class="col-phone"><col class="col-orders"><col class="col-orderno">
                             <col class="col-items"><col class="col-draws"><col class="col-duanhe"><col class="col-milestone">
-                            <col class="col-allbonus"><col class="col-specialbonus"><col class="col-limited">
+                            <col class="col-allbonus"><col class="col-specialbonus"><col class="col-xuanchuan">
+                            <col class="col-limited">
                             <col class="col-paytime"><col class="col-romancedraws"><col class="col-romance">
                             <col class="col-weekendraws"><col class="col-weekend"><col class="col-finaldraws"><col class="col-final">
                         </colgroup>
@@ -234,7 +236,7 @@
                             <tr>
                                 <th>下单账号</th><th>手机号</th><th>订单数</th><th>订单号</th><th>货品</th><th>总抽数</th>
                                 <th>是否端盒</th><th>个人满抽礼</th>
-                                <th>超like卡</th><th>全员特典</th>
+                                <th>超like卡</th><th>全员特典</th><th>宣传集赞礼</th>
                                 <th>限时小卡获得</th>
                                 <th>首次支付时间</th>
                                 <th>7.13-7.15抽数</th><th>浪漫疯子获得</th>
@@ -748,7 +750,11 @@
                 const uniqueCards = [...new Set(user.cards)];
                 const cardCounts = {};
                 user.cards.forEach(c => cardCounts[c] = (cardCounts[c] || 0) + 1);
-                const itemList = uniqueCards.map(c => `${c}x${cardCounts[c]}`).join('; ');
+                // 过滤掉活动奖品卡片（镜头签、惊喜加赠、限时小卡等），只显示基础盲盒卡片
+                const bonusKeywords = ['镜头签', '惊喜加赠', '限时小卡', '浪漫疯子', '周末', '终极'];
+                const itemList = uniqueCards
+                    .filter(c => !bonusKeywords.some(k => c.includes(k)))
+                    .map(c => `${c}x${cardCounts[c]}`).join('; ');
 
                 // 判断各活动区间的首次下单状态
                 // 浪漫疯子活动（7.13-7.15）：判断7.13之前是否有下单
@@ -1051,6 +1057,7 @@
                     weekendDraws: user.weekendDraws, weekendCardCount, weekendCondition,
                     weekendRandomCount, weekendUniqueCount,
                     finalDraws: user.finalDraws, finalEffectiveDraws, finalJingtouqian, finalZhouzheng, finalKaitui, finalSetCount, finalCondition,
+                    xuanchuanGift: '-', // 宣传集赞礼，默认值，待统计后填入
                     cardsBefore10: cardsBefore10.join(';'), cardList: uniqueCards.join(';')
                 });
             });
@@ -1223,24 +1230,37 @@
             const milestones = [10, 20, 30, 40, 50, 66, 88, 100, 120, 150, 180, 200, 240];
             milestoneStats = milestones.map(m => ({ milestone: m, count: userData.filter(u => u.totalDraws >= m).length, rate: ((userData.filter(u => u.totalDraws >= m).length / userData.length) * 100).toFixed(1) + '%' }));
 
-            // 个人满抽礼映射
-            const milestoneRewardMap = {
-                10: '等比例长大小卡×2',
-                20: '陆西骁卡通贴纸',
-                30: '光栅小卡×1',
-                40: '白瓷工艺小卡',
-                50: '烫色签名拍立得',
-                66: '陆西骁淋浴反转胶片',
-                88: '亚克力A5卡册',
-                100: 'mini PB 1',
-                120: '陆西骁金属徽章',
-                200: 'mini PB 2（复数）'
-            };
+            // 个人满抽礼计算（函数式，支持累计数量）
+            function calcMilestoneRewards(totalDraws, isDuanhe) {
+                const rewards = [];
+                // 固定里程碑（数量固定）
+                if (totalDraws >= 10) rewards.push('等比例长大小卡×1');
+                if (totalDraws >= 20) rewards.push('陆西骁卡通贴纸');
+                if (totalDraws >= 40) rewards.push('白瓷工艺小卡');
+                if (totalDraws >= 50) rewards.push('烫色签名拍立得');
+                if (totalDraws >= 66) rewards.push('陆西骁淋浴反转胶片');
+                if (totalDraws >= 88) rewards.push('亚克力A5卡册');
+                // 累计型：光栅小卡，每30抽1张，最多6张
+                const guangtsCount = Math.min(Math.floor(totalDraws / 30), 6);
+                if (guangtsCount > 0) rewards.push('光栅小卡×' + guangtsCount);
+                // mini PB：100抽1份，200抽2份（复数），最多2份
+                if (totalDraws >= 200) rewards.push('mini PB 2（复数）');
+                else if (totalDraws >= 100) rewards.push('mini PB 1');
+                // 陆西骁金属徽章：120抽1枚，240抽2枚
+                if (totalDraws >= 240) rewards.push('陆西骁金属徽章×2');
+                else if (totalDraws >= 120) rewards.push('陆西骁金属徽章×1');
+                
+                // 端盒额外：SET + 独享白瓷
+                if (isDuanhe) {
+                    rewards.push('"唯你的长夏永不凋落"SET');
+                    rewards.push('端盒独享白瓷工艺小卡×1');
+                }
+                return rewards.join(' + ');
+            }
+            
             userData.forEach(u => {
-                const achievedMilestones = milestones.filter(m => u.totalDraws >= m);
-                const rewards = achievedMilestones.map(m => milestoneRewardMap[m]).filter(Boolean);
-                u.milestoneRewards = rewards.join(' + ');
                 u.isDuanhe = userMap.get(u.wechat)?.orderDraws?.some(o => o.isDuanhe) ? '是' : '否';
+                u.milestoneRewards = calcMilestoneRewards(u.totalDraws, u.isDuanhe === '是');
             });
 
             // === 全员特典卡 & 特典卡 ===
@@ -1315,10 +1335,6 @@
                 u.allMemberBonus = u.totalDraws >= 1 ? allMemberCards.join('、') : '';
                 // 特典卡（满10抽）
                 u.specialBonus = u.totalDraws >= 10 ? specialBonusCards.join('、') : '';
-                // 端盒SET追加到货品
-                if (u.isDuanhe === '是') {
-                    u.items = u.items ? u.items + '; ' + duanheSetStr : duanheSetStr;
-                }
             });
 
             document.getElementById('totalUsers').textContent = userData.length.toLocaleString();
@@ -1534,12 +1550,12 @@
                     limitedDetail = '<span style="color:#999;font-size:11px;">未满10抽</span>';
                 }
                 
-                // 浪漫疯子详细显示
+                // 浪漫疯子详细显示（简化：列头已说明是浪漫/周末）
                 let romanceDetail = '-';
                 if (user.romanceRandomCount > 0 || user.romanceUniqueCount > 0) {
                     const parts = [];
-                    if (user.romanceRandomCount > 0) parts.push('<span style="background:#fce7f3;color:#db2777;padding:1px 5px;border-radius:3px;font-size:10px;margin:1px;">浪漫随机×' + user.romanceRandomCount + '</span>');
-                    if (user.romanceUniqueCount > 0) parts.push('<span style="background:#fce7f3;color:#db2777;padding:1px 5px;border-radius:3px;font-size:10px;margin:1px;">浪漫不重复×' + user.romanceUniqueCount + '</span>');
+                    if (user.romanceRandomCount > 0) parts.push('<span style="background:#fce7f3;color:#db2777;padding:1px 5px;border-radius:3px;font-size:10px;margin:1px;">随机×' + user.romanceRandomCount + '</span>');
+                    if (user.romanceUniqueCount > 0) parts.push('<span style="background:#fce7f3;color:#db2777;padding:1px 5px;border-radius:3px;font-size:10px;margin:1px;">不重复×' + user.romanceUniqueCount + '</span>');
                     romanceDetail = parts.join('');
                 } else if (user.romanceCondition && user.romanceCondition.includes('未达标')) {
                     romanceDetail = '<span style="color:#999;font-size:11px;">未达标</span>';
@@ -1553,8 +1569,8 @@
                 let weekendDetail = '-';
                 if (user.weekendRandomCount > 0 || user.weekendUniqueCount > 0) {
                     const parts = [];
-                    if (user.weekendRandomCount > 0) parts.push('<span style="background:#fef3c7;color:#d97706;padding:1px 5px;border-radius:3px;font-size:10px;margin:1px;">周末随机×' + user.weekendRandomCount + '</span>');
-                    if (user.weekendUniqueCount > 0) parts.push('<span style="background:#fef3c7;color:#d97706;padding:1px 5px;border-radius:3px;font-size:10px;margin:1px;">周末不重复×' + user.weekendUniqueCount + '</span>');
+                    if (user.weekendRandomCount > 0) parts.push('<span style="background:#fef3c7;color:#d97706;padding:1px 5px;border-radius:3px;font-size:10px;margin:1px;">随机×' + user.weekendRandomCount + '</span>');
+                    if (user.weekendUniqueCount > 0) parts.push('<span style="background:#fef3c7;color:#d97706;padding:1px 5px;border-radius:3px;font-size:10px;margin:1px;">不重复×' + user.weekendUniqueCount + '</span>');
                     weekendDetail = parts.join('');
                 } else if (user.weekendCondition && user.weekendCondition.includes('未达标')) {
                     weekendDetail = '<span style="color:#999;font-size:11px;">未达标</span>';
@@ -1585,6 +1601,7 @@
                     <td>${milestoneBadge}</td>
                     <td>${allMemberBadge}</td>
                     <td>${specialBonusBadge}</td>
+                    <td><span style="color:#999;font-size:11px;">${user.xuanchuanGift || '-'}</span></td>
                     <td style="white-space:nowrap;">${limitedDetail}</td>
                     <td>${user.firstPayTime || ''}</td>
                     <td>${user.romanceDraws || 0}</td>
@@ -1595,7 +1612,7 @@
                     <td style="max-width:200px;">${user.finalCondition || '<span style="color:#999;font-size:11px;">-</span>'}</td>
                 </tr>
             `;
-            }).join('') : '<tr><td colspan="18" style="text-align:center;color:#999;">暂无数据</td></tr>';
+            }).join('') : '<tr><td colspan="19" style="text-align:center;color:#999;">暂无数据</td></tr>';
 
             const totalPages = Math.ceil(filteredData.length / pageSize);
             const pagination = document.getElementById('pagination');
@@ -1658,11 +1675,11 @@
         }
 
         function exportUserSheet() {
-            const headers = ['下单账号', '手机号', '订单数', '订单号', '货品', '总抽数', '是否端盒', '个人满抽礼', '全员特典', '特典卡', '限时小卡1', '限时小卡2', '限时小卡3', '首次支付时间', '满10抽时间', '限时小卡获得情况', '0-1小时抽数', '1-6小时抽数', '6-24小时抽数', '7.13-7.15抽数', '浪漫疯子随机', '浪漫疯子不重复', '7.18-7.20抽数', '周末随机', '周末不重复', '终极活动抽数', '终极活动有效抽数(端盒381)', '镜头签数量', '周正小卡数量', '开推制服小卡数量', '终极活动套数', '终极活动获得情况'];
+            const headers = ['下单账号', '手机号', '订单数', '订单号', '货品', '总抽数', '是否端盒', '个人满抽礼', '超like卡', '全员特典', '宣传集赞礼', '限时小卡1', '限时小卡2', '限时小卡3', '首次支付时间', '满10抽时间', '限时小卡获得情况', '0-1小时抽数', '1-6小时抽数', '6-24小时抽数', '7.13-7.15抽数', '浪漫疯子随机', '浪漫疯子不重复', '7.18-7.20抽数', '周末随机', '周末不重复', '终极活动抽数', '终极活动有效抽数(端盒381)', '镜头签数量', '周正小卡数量', '开推制服小卡数量', '终极活动套数', '终极活动获得情况'];
             const data = filteredData.map(u => [
                 u.wechat || '', u.phone || '', u.orderCount || 0, u.orderNos || '', u.items || '',
                 u.totalDraws || 0, u.isDuanhe || '否', u.milestoneRewards || '',
-                u.allMemberBonus || '', u.specialBonus || '',
+                u.allMemberBonus || '', u.specialBonus || '', u.xuanchuanGift || '-',
                 u.limited1Count || 0, u.limited2Count || 0, u.limited3Count || 0,
                 u.firstPayTime || '', u.full10Time || '', u.limitedCards || '',
                 u.activity0_1h || 0, u.activity1_6h || 0, u.activity6_24h || 0,
@@ -1735,7 +1752,7 @@
         }
 
         function exportLaibaoSheet() {
-            const headers = ['查询码（手机号）', '下单账号', '总抽数', '是否端盒', '超like卡', '全员特典', '限时小卡获得', '浪漫疯子获得', '周末活动获得', '终极活动获得', '获得卡片', '个人满抽礼'];
+            const headers = ['查询码（手机号）', '下单账号', '总抽数', '是否端盒', '超like卡', '全员特典', '宣传集赞礼', '限时小卡获得', '浪漫疯子获得', '周末活动获得', '终极活动获得', '获得卡片', '个人满抽礼'];
             const data = filteredData.map(u => {
                 // 限时小卡文字描述
                 const limitedParts = [];
@@ -1744,16 +1761,16 @@
                 if (u.limited3Count > 0) limitedParts.push('限时3×' + u.limited3Count);
                 const limitedStr = limitedParts.length > 0 ? limitedParts.join('、') : (u.limitedCards === '未满10抽' ? '未满10抽' : '-');
                 
-                // 浪漫疯子文字描述（加上"浪漫"前缀）
+                // 浪漫疯子文字描述（简化：列头已说明是浪漫/周末）
                 const romanceParts = [];
-                if (u.romanceRandomCount > 0) romanceParts.push('浪漫随机×' + u.romanceRandomCount);
-                if (u.romanceUniqueCount > 0) romanceParts.push('浪漫不重复×' + u.romanceUniqueCount);
+                if (u.romanceRandomCount > 0) romanceParts.push('随机×' + u.romanceRandomCount);
+                if (u.romanceUniqueCount > 0) romanceParts.push('不重复×' + u.romanceUniqueCount);
                 const romanceStr = romanceParts.length > 0 ? romanceParts.join('、') : (u.romanceCondition?.includes('未达标') ? '未达标' : '-');
                 
-                // 周末活动文字描述（加上"周末"前缀）
+                // 周末活动文字描述（简化）
                 const weekendParts = [];
-                if (u.weekendRandomCount > 0) weekendParts.push('周末随机×' + u.weekendRandomCount);
-                if (u.weekendUniqueCount > 0) weekendParts.push('周末不重复×' + u.weekendUniqueCount);
+                if (u.weekendRandomCount > 0) weekendParts.push('随机×' + u.weekendRandomCount);
+                if (u.weekendUniqueCount > 0) weekendParts.push('不重复×' + u.weekendUniqueCount);
                 const weekendStr = weekendParts.length > 0 ? weekendParts.join('、') : (u.weekendCondition?.includes('未达标') ? '未达标' : '-');
                 
                 return [
@@ -1763,6 +1780,7 @@
                     u.isDuanhe || '否',
                     u.allMemberBonus || '-',
                     u.specialBonus || '-',
+                    u.xuanchuanGift || '-',
                     limitedStr,
                     romanceStr,
                     weekendStr,
