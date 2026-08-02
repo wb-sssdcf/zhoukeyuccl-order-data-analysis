@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>抽抽乐订单数据分析（待优化2026.8.2 11：40更新）</title>
+    <title>抽抽乐订单数据分析（待优化 2026.8.2 21:06更新）</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <style>
@@ -66,6 +66,7 @@
         #userTable col.col-specialbonus { width: 110px; }
         #userTable col.col-xuanchuan { width: 100px; }
         #userTable col.col-limited { width: 110px; }
+        #userTable col.col-buyou { width: 100px; }
         #userTable col.col-paytime { width: 130px; }
         #userTable col.col-romancedraws { width: 70px; }
         #userTable col.col-romance { width: 90px; }
@@ -99,7 +100,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>📊 抽抽乐订单数据分析（待优化2026.8.2 11：40更新）</h1>
+            <h1>📊 抽抽乐订单数据分析（待优化2026.8.2 21：06更新）</h1>
             <p>上传Excel文件，自动生成数据分析报告</p>
         </div>
 
@@ -228,7 +229,7 @@
                             <col class="col-account"><col class="col-phone"><col class="col-orders"><col class="col-orderno">
                             <col class="col-items"><col class="col-draws"><col class="col-duanhe"><col class="col-milestone">
                             <col class="col-allbonus"><col class="col-specialbonus"><col class="col-xuanchuan">
-                            <col class="col-limited">
+                            <col class="col-limited"><col class="col-buyou">
                             <col class="col-paytime"><col class="col-romancedraws"><col class="col-romance">
                             <col class="col-weekendraws"><col class="col-weekend"><col class="col-finaldraws"><col class="col-final">
                         </colgroup>
@@ -238,6 +239,7 @@
                                 <th>是否端盒</th><th>个人满抽礼</th>
                                 <th>超like卡</th><th>全员特典</th><th>宣传集赞礼</th>
                                 <th>限时小卡获得</th>
+                                <th>补邮情况</th>
                                 <th>首次支付时间</th>
                                 <th>7.13-7.15抽数</th><th>浪漫疯子获得</th>
                                 <th>7.18-7.20抽数</th><th>周末活动获得</th>
@@ -491,10 +493,15 @@
                 const giftInfo = row['赠品'] ? String(row['赠品']) : '';
                 const itemCount = row['商品总件数'] || 0;
                 
-                // 判断订单类型：是否有奖品、是否是端盒
+                // 判断订单类型：是否有奖品、是否是端盒、是否是补邮、是否有卡片
                 let hasPrize = giftInfo && giftInfo.includes('奖品');
                 let isDuanhe = false;
                 let duanheCount = 0;
+                let isBuyou = false;  // 是否是补邮订单
+                let buyouCount = 0;   // 补邮数量
+                let hasCards = false;  // 是否包含卡片信息（已开奖）
+                let isBlindBox = false;  // 是否是纯盲盒商品（未开奖）
+                
                 if (orderDesc) {
                     const items = orderDesc.split(';');
                     items.forEach(item => {
@@ -506,12 +513,31 @@
                             isDuanhe = true;
                             duanheCount += qty;
                         }
+                        if (namePart.includes('补邮')) {
+                            isBuyou = true;
+                            buyouCount += qty;
+                        }
+                        // 检测是否是纯盲盒商品（未开奖）
+                        if (namePart.includes('盲盒商品')) {
+                            isBlindBox = true;
+                        }
+                        // 检测是否包含卡片信息（已开奖）
+                        // 格式：周柯宇爱意正值炽夏小卡抽抽乐-SR6 或 周柯宇爱意正值炽夏小卡抽抽乐-R47 等
+                        if (!isBlindBox && !isDuanhe && !isBuyou && 
+                            (namePart.includes('SR') || namePart.includes('SSR') || namePart.includes('R')) &&
+                            namePart.includes('周柯宇')) {
+                            hasCards = true;
+                        }
                     });
                 }
                 
-                // 有效订单：有奖品 或者 是端盒订单
-                // 没有奖品的纯盲盒订单（还没拆开的）不算
-                const isValidOrder = hasPrize || isDuanhe;
+                // 有效订单：
+                // 1. 有奖品信息
+                // 2. 是端盒订单
+                // 3. 包含卡片信息（已开奖）
+                // 4. 是补邮订单
+                // 排除：纯盲盒商品（未开奖）
+                const isValidOrder = (hasPrize || isDuanhe || hasCards || isBuyou) && !isBlindBox;
 
                 let payTime = null;
                 if (payTimeRaw !== undefined && payTimeRaw !== null && payTimeRaw !== '') {
@@ -594,7 +620,7 @@
                 
                 // 只记录有效订单（有奖品或端盒）
                 if (isValidOrder) {
-                    orderData.push({ orderNo, wechat, phone, payTime, orderDesc, itemCount: duanheDraws, activityPeriod, isRomancePeriod, isDuanhe, duanheCount, hasPrize });
+                    orderData.push({ orderNo, wechat, phone, payTime, orderDesc, itemCount: duanheDraws, activityPeriod, isRomancePeriod, isDuanhe, duanheCount, hasPrize, isBuyou, buyouCount });
                 }
 
                 if (orderDesc) {
@@ -616,7 +642,12 @@
                         if (cardName.includes('.')) cardName = cardName.split('.')[0] || cardName;
                         if (!cardName) return;
 
-                        for (let i = 0; i < qty; i++) {
+                        // 检测商品名称中的"X张"模式（如"陆西骁限定小卡9张"），实际抽数 = 购买数量 × 每份张数
+                        const packMatch = namePart.match(/(\d+)张/);
+                        const packSize = packMatch ? parseInt(packMatch[1]) : 1;
+                        const actualQty = qty * packSize;
+
+                        for (let i = 0; i < actualQty; i++) {
                             cardData.push({ orderNo, wechat, phone, payTime, cardName, cardType: getCardType(cardName), activityPeriod, isRomancePeriod });
                         }
                     });
@@ -648,7 +679,8 @@
                     romanceDraws: 0, romanceOrders: 0, 
                     totalDraws: 0, orderDraws: [],
                     prizeOrders: new Set(),
-                    weekendDraws: 0, finalDraws: 0
+                    weekendDraws: 0, finalDraws: 0,
+                    buyouOrders: [], buyouCount: 0  // 补邮订单
                 });
                 const user = userMap.get(card.wechat);
                 user.orders.add(card.orderNo);
@@ -687,7 +719,8 @@
                     romanceDraws: 0, romanceOrders: 0, 
                     totalDraws: 0, orderDraws: [],
                     prizeOrders: new Set(),
-                    weekendDraws: 0, finalDraws: 0
+                    weekendDraws: 0, finalDraws: 0,
+                    buyouOrders: [], buyouCount: 0  // 补邮订单
                 });
                 const user = userMap.get(order.wechat);
                 user.orders.add(order.orderNo);
@@ -737,6 +770,12 @@
                     if (order.payTime) {
                         user.orderDraws.push({ orderNo: order.orderNo, time: order.payTime, draws: order.itemCount, isDuanhe: true });
                     }
+                }
+                
+                // 统计补邮订单
+                if (order.isBuyou) {
+                    user.buyouOrders.push({ orderNo: order.orderNo, time: order.payTime, count: order.buyouCount });
+                    user.buyouCount += order.buyouCount;
                 }
             });
 
@@ -1057,7 +1096,8 @@
                     weekendDraws: user.weekendDraws, weekendCardCount, weekendCondition,
                     weekendRandomCount, weekendUniqueCount,
                     finalDraws: user.finalDraws, finalEffectiveDraws, finalJingtouqian, finalZhouzheng, finalKaitui, finalSetCount, finalCondition,
-                    xuanchuanGift: '-', // 宣传集赞礼，默认值，待统计后填入
+                    xuanchuanGift: '无', // 宣传集赞礼，默认值，待统计后填入卡片编号
+                    buyouCount: user.buyouCount || 0, buyouOrders: user.buyouOrders || [],
                     cardsBefore10: cardsBefore10.join(';'), cardList: uniqueCards.join(';')
                 });
             });
@@ -1589,6 +1629,20 @@
                     ? `<span style="color:#7c3aed;font-size:11px;word-break:break-all;white-space:normal;line-height:1.4;">${user.specialBonus}</span>` 
                     : '<span style="color:#999;font-size:11px;">-</span>';
                 
+                // 补邮情况显示：无需补邮 / 已补邮 / 未补邮
+                // 规则：满10抽无需补邮，少于10抽才需要补邮
+                let buyouDetail = '';
+                {
+                    const needBuyou = user.totalDraws < 10; // 少于10抽才需要补邮
+                    if (!needBuyou) {
+                        buyouDetail = '<span style="color:#999;font-size:11px;" title="已满10抽">无需补邮</span>';
+                    } else if (user.buyouCount > 0) {
+                        buyouDetail = `<span style="color:#059669;font-size:11px;" title="未满10抽，已有补邮订单">已补邮*${user.buyouCount}</span>`;
+                    } else {
+                        buyouDetail = '<span style="color:#ef4444;font-size:11px;" title="未满10抽，尚无补邮订单">未补邮</span>';
+                    }
+                }
+                
                 return `
                 <tr>
                     <td>${user.wechat || ''}</td>
@@ -1601,8 +1655,9 @@
                     <td>${milestoneBadge}</td>
                     <td>${allMemberBadge}</td>
                     <td>${specialBonusBadge}</td>
-                    <td><span style="color:#999;font-size:11px;">${user.xuanchuanGift || '-'}</span></td>
+                    <td>${user.xuanchuanGift && user.xuanchuanGift !== '无' ? `<span style="color:#059669;font-size:11px;">${user.xuanchuanGift}</span>` : '<span style="color:#999;font-size:11px;">无</span>'}</td>
                     <td style="white-space:nowrap;">${limitedDetail}</td>
+                    <td style="white-space:nowrap;">${buyouDetail}</td>
                     <td>${user.firstPayTime || ''}</td>
                     <td>${user.romanceDraws || 0}</td>
                     <td style="white-space:nowrap;">${romanceDetail}</td>
@@ -1612,7 +1667,7 @@
                     <td style="max-width:200px;">${user.finalCondition || '<span style="color:#999;font-size:11px;">-</span>'}</td>
                 </tr>
             `;
-            }).join('') : '<tr><td colspan="19" style="text-align:center;color:#999;">暂无数据</td></tr>';
+            }).join('') : '<tr><td colspan="20" style="text-align:center;color:#999;">暂无数据</td></tr>';
 
             const totalPages = Math.ceil(filteredData.length / pageSize);
             const pagination = document.getElementById('pagination');
@@ -1675,20 +1730,36 @@
         }
 
         function exportUserSheet() {
-            const headers = ['下单账号', '手机号', '订单数', '订单号', '货品', '总抽数', '是否端盒', '个人满抽礼', '超like卡', '全员特典', '宣传集赞礼', '限时小卡1', '限时小卡2', '限时小卡3', '首次支付时间', '满10抽时间', '限时小卡获得情况', '0-1小时抽数', '1-6小时抽数', '6-24小时抽数', '7.13-7.15抽数', '浪漫疯子随机', '浪漫疯子不重复', '7.18-7.20抽数', '周末随机', '周末不重复', '终极活动抽数', '终极活动有效抽数(端盒381)', '镜头签数量', '周正小卡数量', '开推制服小卡数量', '终极活动套数', '终极活动获得情况'];
-            const data = filteredData.map(u => [
-                u.wechat || '', u.phone || '', u.orderCount || 0, u.orderNos || '', u.items || '',
-                u.totalDraws || 0, u.isDuanhe || '否', u.milestoneRewards || '',
-                u.allMemberBonus || '', u.specialBonus || '', u.xuanchuanGift || '-',
-                u.limited1Count || 0, u.limited2Count || 0, u.limited3Count || 0,
-                u.firstPayTime || '', u.full10Time || '', u.limitedCards || '',
-                u.activity0_1h || 0, u.activity1_6h || 0, u.activity6_24h || 0,
-                u.romanceDraws || 0, u.romanceRandomCount || 0, u.romanceUniqueCount || 0,
-                u.weekendDraws || 0, u.weekendRandomCount || 0, u.weekendUniqueCount || 0,
-                u.finalDraws || 0, u.finalEffectiveDraws || 0,
-                u.finalJingtouqian || 0, u.finalZhouzheng || 0, u.finalKaitui || 0,
-                u.finalSetCount || 0, u.finalCondition || ''
-            ]);
+            const headers = ['下单账号', '手机号', '订单数', '订单号', '货品', '总抽数', '是否端盒', '个人满抽礼', '超like卡', '全员特典', '宣传集赞礼', '补邮情况', '限时小卡1', '限时小卡2', '限时小卡3', '首次支付时间', '满10抽时间', '限时小卡获得情况', '0-1小时抽数', '1-6小时抽数', '6-24小时抽数', '7.13-7.15抽数', '浪漫疯子随机', '浪漫疯子不重复', '7.18-7.20抽数', '周末随机', '周末不重复', '终极活动抽数', '终极活动有效抽数(端盒381)', '镜头签数量', '周正小卡数量', '开推制服小卡数量', '终极活动套数', '终极活动获得情况'];
+            const data = filteredData.map(u => {
+                // 补邮情况描述：无需补邮 / 已补邮 / 未补邮
+                // 规则：满10抽无需补邮，少于10抽才需要补邮
+                let buyouStr = '无需补邮';
+                {
+                    const needBuyou = u.totalDraws < 10;
+                    if (needBuyou) {
+                        if (u.buyouCount > 0) {
+                            buyouStr = '已补邮*' + u.buyouCount;
+                        } else {
+                            buyouStr = '未补邮';
+                        }
+                    }
+                }
+                return [
+                    u.wechat || '', u.phone || '', u.orderCount || 0, u.orderNos || '', u.items || '',
+                    u.totalDraws || 0, u.isDuanhe || '否', u.milestoneRewards || '',
+                    u.allMemberBonus || '', u.specialBonus || '', u.xuanchuanGift || '无',
+                    buyouStr,
+                    u.limited1Count || 0, u.limited2Count || 0, u.limited3Count || 0,
+                    u.firstPayTime || '', u.full10Time || '', u.limitedCards || '',
+                    u.activity0_1h || 0, u.activity1_6h || 0, u.activity6_24h || 0,
+                    u.romanceDraws || 0, u.romanceRandomCount || 0, u.romanceUniqueCount || 0,
+                    u.weekendDraws || 0, u.weekendRandomCount || 0, u.weekendUniqueCount || 0,
+                    u.finalDraws || 0, u.finalEffectiveDraws || 0,
+                    u.finalJingtouqian || 0, u.finalZhouzheng || 0, u.finalKaitui || 0,
+                    u.finalSetCount || 0, u.finalCondition || ''
+                ];
+            });
             return XLSX.utils.aoa_to_sheet([headers, ...data]);
         }
 
@@ -1752,8 +1823,21 @@
         }
 
         function exportLaibaoSheet() {
-            const headers = ['查询码（手机号）', '下单账号', '总抽数', '是否端盒', '超like卡', '全员特典', '宣传集赞礼', '限时小卡获得', '浪漫疯子获得', '周末活动获得', '终极活动获得', '获得卡片', '个人满抽礼'];
+            const headers = ['查询码（手机号）', '下单账号', '总抽数', '是否端盒', '超like卡', '全员特典', '宣传集赞礼', '补邮情况', '限时小卡获得', '浪漫疯子获得', '周末活动获得', '终极活动获得', '获得卡片', '个人满抽礼'];
             const data = filteredData.map(u => {
+                // 补邮情况描述：无需补邮 / 已补邮 / 未补邮
+                // 规则：满10抽无需补邮，少于10抽才需要补邮
+                let buyouStr = '无需补邮';
+                {
+                    const needBuyou = u.totalDraws < 10;
+                    if (needBuyou) {
+                        if (u.buyouCount > 0) {
+                            buyouStr = '已补邮*' + u.buyouCount;
+                        } else {
+                            buyouStr = '未补邮';
+                        }
+                    }
+                }
                 // 限时小卡文字描述
                 const limitedParts = [];
                 if (u.limited1Count > 0) limitedParts.push('限时1×' + u.limited1Count);
@@ -1781,6 +1865,7 @@
                     u.allMemberBonus || '-',
                     u.specialBonus || '-',
                     u.xuanchuanGift || '-',
+                    buyouStr,
                     limitedStr,
                     romanceStr,
                     weekendStr,
