@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>抽抽乐订单数据分析（待优化 2026.8.2 21:06更新）</title>
+    <title>抽抽乐订单数据分析（待优化 2026.8.2 22：13更新）</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <style>
@@ -100,7 +100,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>📊 抽抽乐订单数据分析（待优化2026.8.2 21：06更新）</h1>
+            <h1>📊 抽抽乐订单数据分析（待优化2026.8.2 22：13更新）</h1>
             <p>上传Excel文件，自动生成数据分析报告</p>
         </div>
 
@@ -1823,7 +1823,7 @@
         }
 
         function exportLaibaoSheet() {
-            const headers = ['查询码（手机号）', '下单账号', '总抽数', '是否端盒', '超like卡', '全员特典', '宣传集赞礼', '补邮情况', '限时小卡获得', '浪漫疯子获得', '周末活动获得', '终极活动获得', '获得卡片', '个人满抽礼'];
+            const headers = ['查询码(下单账号)', '下单账号', '收货人手机号', '总抽数', '是否端盒', '超like卡', '全员特典', '宣传集赞礼', '补邮情况', '限时小卡获得', '浪漫疯子获得', '周末活动获得', '终极活动获得', '获得卡片', '个人满抽礼', '备注'];
             const data = filteredData.map(u => {
                 // 补邮情况描述：无需补邮 / 已补邮 / 未补邮
                 // 规则：满10抽无需补邮，少于10抽才需要补邮
@@ -1845,21 +1845,38 @@
                 if (u.limited3Count > 0) limitedParts.push('限时3×' + u.limited3Count);
                 const limitedStr = limitedParts.length > 0 ? limitedParts.join('、') : (u.limitedCards === '未满10抽' ? '未满10抽' : '-');
                 
-                // 浪漫疯子文字描述（简化：列头已说明是浪漫/周末）
+                // 浪漫疯子文字描述
                 const romanceParts = [];
                 if (u.romanceRandomCount > 0) romanceParts.push('随机×' + u.romanceRandomCount);
                 if (u.romanceUniqueCount > 0) romanceParts.push('不重复×' + u.romanceUniqueCount);
                 const romanceStr = romanceParts.length > 0 ? romanceParts.join('、') : (u.romanceCondition?.includes('未达标') ? '未达标' : '-');
                 
-                // 周末活动文字描述（简化）
+                // 周末活动文字描述
                 const weekendParts = [];
                 if (u.weekendRandomCount > 0) weekendParts.push('随机×' + u.weekendRandomCount);
                 if (u.weekendUniqueCount > 0) weekendParts.push('不重复×' + u.weekendUniqueCount);
                 const weekendStr = weekendParts.length > 0 ? weekendParts.join('、') : (u.weekendCondition?.includes('未达标') ? '未达标' : '-');
                 
+                // 备注：检测海外用户（下单账号或手机号为非11位国内手机号格式）
+                let remark = '';
+                const wechat = String(u.wechat || '').trim();
+                const phone = String(u.phone || '').trim();
+                const isOverseasAccount = wechat && !(wechat.length === 11 && wechat.startsWith('1') && /^\d+$/.test(wechat));
+                const isOverseasPhone = phone && !(phone.length === 11 && phone.startsWith('1') && /^\d+$/.test(phone));
+                if (isOverseasAccount || isOverseasPhone) {
+                    if (isOverseasAccount && isOverseasPhone) {
+                        remark = '⚠ 海外用户（账号和手机号均为境外）';
+                    } else if (isOverseasAccount) {
+                        remark = '⚠ 海外账号';
+                    } else {
+                        remark = '⚠ 海外手机号';
+                    }
+                }
+                
                 return [
-                    u.phone || '',
-                    u.wechat || '',
+                    u.wechat || '',      // 查询码（下单账号）
+                    u.wechat || '',      // 下单账号
+                    u.phone || '',       // 收货人手机号
                     u.totalDraws || 0,
                     u.isDuanhe || '否',
                     u.allMemberBonus || '-',
@@ -1871,7 +1888,8 @@
                     weekendStr,
                     u.finalCondition || '-',
                     u.items || '',
-                    u.milestoneRewards || ''
+                    u.milestoneRewards || '',
+                    remark
                 ];
             });
             return XLSX.utils.aoa_to_sheet([headers, ...data]);
