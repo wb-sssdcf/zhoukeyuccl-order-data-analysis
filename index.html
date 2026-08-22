@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>抽抽乐订单数据分析（待优化 2026.8.22 15：17更新）</title>
+    <title>抽抽乐订单数据分析（待优化 2026.8.22 19：12更新）</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <style>
@@ -100,7 +100,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>📊 抽抽乐订单数据分析（待优化2026.8.22 15：17更新）</h1>
+            <h1>📊 抽抽乐订单数据分析（待优化2026.8.22 19：12更新）</h1>
             <p>上传Excel文件，自动生成数据分析报告</p>
         </div>
 
@@ -2621,6 +2621,65 @@
             }).join('');
         }
 
+        // ---------- 兑换获得卡汇总（碎卡兑换获得卡 / 宣传集赞礼） ----------
+        // 稀有度+编号升序排序（无数字编号排该稀有度末尾），参考 sortCards 思路
+        function sortCardSummaryRows(rows) {
+            return rows.slice().sort((a, b) => {
+                const pa = parseCardItem(a.card);
+                const pb = parseCardItem(b.card);
+                const typeA = pa && pa.type !== 'UNKNOWN' ? pa.type : getCardType(a.card);
+                const typeB = pb && pb.type !== 'UNKNOWN' ? pb.type : getCardType(b.card);
+                const ta = CARD_RARITY_ORDER.hasOwnProperty(typeA) ? CARD_RARITY_ORDER[typeA] : 99;
+                const tb = CARD_RARITY_ORDER.hasOwnProperty(typeB) ? CARD_RARITY_ORDER[typeB] : 99;
+                if (ta !== tb) return ta - tb;
+                const na = pa && pa.num !== null ? pa.num : Number.MAX_SAFE_INTEGER;
+                const nb = pb && pb.num !== null ? pb.num : Number.MAX_SAFE_INTEGER;
+                if (na !== nb) return na - nb;
+                return String(a.card).localeCompare(String(b.card));
+            });
+        }
+
+        // 汇总1：碎卡兑换获得卡（通过审核请求，按换入卡面归一化分组累加张数）
+        function buildSuikaGainSummary() {
+            const map = {};
+            let totalQty = 0;
+            buildSuikaRequestRows().forEach(r => {
+                if (r.audit.type !== '通过') return;
+                const card = normalizeCardId(r.audit.inCard);
+                if (!card) return;
+                const qty = (r.audit.inQty > 0 ? r.audit.inQty : 1);
+                map[card] = (map[card] || 0) + qty;
+                totalQty += qty;
+            });
+            const pct = q => totalQty > 0 ? (q / totalQty * 100).toFixed(1) + '%' : '0.0%';
+            const data = sortCardSummaryRows(Object.keys(map).map(card => ({ card, qty: map[card] }))).map(x => [x.card, getCardType(x.card), x.qty, pct(x.qty)]);
+            if (data.length === 0) data.push(['（无通过记录）', '', 0, '0.0%']);
+            data.push(['合计', '', totalQty, '100.0%']);
+            return data;
+        }
+
+        // 汇总2：宣传集赞礼汇总（userData.xuanchuanGift，排除无/异常，？待核实归并计数）
+        function buildJizanGiftSummary() {
+            const map = {};
+            let totalQty = 0, totalPending = 0;
+            userData.forEach(u => {
+                const raw = String(u.xuanchuanGift || '').trim();
+                if (!raw || raw === '无' || raw === '异常，请联系客服') return;
+                const pending = /([？?]待核实)$/.test(raw);
+                const card = normalizeCardId(raw.replace(/([？?]待核实)$/, ''));
+                if (!card) return;
+                map[card] = map[card] || { card, qty: 0, pending: 0 };
+                map[card].qty += 1;
+                totalQty += 1;
+                if (pending) { map[card].pending += 1; totalPending += 1; }
+            });
+            const pct = q => totalQty > 0 ? (q / totalQty * 100).toFixed(1) + '%' : '0.0%';
+            const data = sortCardSummaryRows(Object.values(map)).map(x => [x.card, getCardType(x.card), x.qty, x.pending, pct(x.qty)]);
+            if (data.length === 0) data.push(['（无有效记录）', '', 0, 0, '0.0%']);
+            data.push(['合计', '', totalQty, totalPending, '100.0%']);
+            return data;
+        }
+
         // ---------- 碎卡审核结果导出（四态多Sheet） ----------
         function buildSuikaRequestRows() {
             const rows = [];
@@ -2665,6 +2724,7 @@
             mkSheet('不通过审核', failHeaders, failData);
             mkSheet('未找到用户', notFoundHeaders, notFoundData);
             mkSheet('需人工复核', reviewHeaders, reviewData);
+            mkSheet('碎卡兑换获得卡汇总', ['卡面编号', '稀有度', '获得张数', '占比'], buildSuikaGainSummary());
             XLSX.writeFile(wb, getTimestampFilename('碎卡兑换审核结果'));
         }
 
@@ -2855,6 +2915,11 @@
             const ws2 = XLSX.utils.aoa_to_sheet([h2, ...d2]);
             ws2['!cols'] = [{ wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 12 }, { wch: 10 }, { wch: 24 }];
             XLSX.utils.book_append_sheet(wb, ws2, '导入结果汇总');
+            const h3 = ['卡面编号', '稀有度', '数量', '其中待核实', '占比'];
+            const d3 = buildJizanGiftSummary();
+            const ws3 = XLSX.utils.aoa_to_sheet([h3, ...d3]);
+            ws3['!cols'] = [{ wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 10 }];
+            XLSX.utils.book_append_sheet(wb, ws3, '宣传集赞礼汇总');
             XLSX.writeFile(wb, getTimestampFilename('集赞导入结果'));
         }
 
