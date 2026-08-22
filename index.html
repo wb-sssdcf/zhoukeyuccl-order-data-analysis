@@ -132,13 +132,16 @@
                 <div class="stat-card"><div class="value" id="suikaTotalRequests">-</div><div class="label">总兑换请求</div></div>
                 <div class="stat-card"><div class="value" id="suikaPassCount" style="color:#059669;">-</div><div class="label">通过提交数</div></div>
                 <div class="stat-card"><div class="value" id="suikaFailCount" style="color:#ef4444;">-</div><div class="label">不通过提交数</div></div>
+                <div class="stat-card"><div class="value" id="suikaNotFoundCount" style="color:#ea580c;">-</div><div class="label">未找到用户提交数</div></div>
+                <div class="stat-card"><div class="value" id="suikaReviewCount" style="color:#ca8a04;">-</div><div class="label">需人工复核提交数</div></div>
             </div>
             <div class="table-section">
                 <div class="table-header">
                     <h3>🔍 碎卡兑换审核结果</h3>
                     <div>
-                        <span style="font-size:12px;color:#999;margin-right:10px;">绿色=通过，红色=不通过</span>
+                        <span style="font-size:12px;color:#999;margin-right:10px;">绿色=通过，红色=不通过，橙色=未找到用户，黄色=需人工复核</span>
                         <button class="btn btn-sm" onclick="exportSuikaResult()">📥 导出审核结果Excel</button>
+                        <button class="btn btn-sm" onclick="exportSuikaNotFound()">📥 导出未匹配用户清单</button>
                     </div>
                 </div>
                 <div class="table-wrapper" style="max-height:600px;">
@@ -562,6 +565,7 @@
                 const orderNo = row['订单编号'] || row['订单号'];
                 const wechat = row['下单账号'] || row['账号'];
                 const phone = row['收货人/提货人手机号'] || row['手机号'] || row['收货人手机号'];
+                const recipientName = row['收货人/提货人姓名'] || row['收货人姓名'] || row['收件人姓名'] || row['提货人'] || row['收件人'] || row['收货人'] || '';
                 // 支持多种日期字段名
                 const payTimeRaw = row['支付时间'] || row['下单时间'] || row['付款时间'] || row['成交时间'];
                 const orderDesc = row['订单描述'] ? String(row['订单描述']) : '';
@@ -695,7 +699,7 @@
                 
                 // 只记录有效订单（有奖品或端盒）
                 if (isValidOrder) {
-                    orderData.push({ orderNo, wechat, phone, payTime, orderDesc, itemCount: duanheDraws, activityPeriod, isRomancePeriod, isDuanhe, duanheCount, hasPrize, isBuyou, buyouCount });
+                    orderData.push({ orderNo, wechat, phone, recipientName, payTime, orderDesc, itemCount: duanheDraws, activityPeriod, isRomancePeriod, isDuanhe, duanheCount, hasPrize, isBuyou, buyouCount });
                 }
 
                 if (orderDesc) {
@@ -723,7 +727,7 @@
                         const actualQty = qty * packSize;
 
                         for (let i = 0; i < actualQty; i++) {
-                            cardData.push({ orderNo, wechat, phone, payTime, cardName, cardType: getCardType(cardName), activityPeriod, isRomancePeriod });
+                            cardData.push({ orderNo, wechat, phone, recipientName, payTime, cardName, cardType: getCardType(cardName), activityPeriod, isRomancePeriod });
                         }
                     });
                 }
@@ -738,7 +742,7 @@
                         if (!cardName) return;
                         // 跳过端盒
                         if (cardName.includes('端盒') || cardName.includes('一键端盒')) return;
-                        cardData.push({ orderNo, wechat, phone, payTime, cardName, cardType: getCardType(cardName), activityPeriod, isRomancePeriod });
+                        cardData.push({ orderNo, wechat, phone, recipientName, payTime, cardName, cardType: getCardType(cardName), activityPeriod, isRomancePeriod });
                     });
                 }
             });
@@ -748,7 +752,7 @@
             // 先从cardData（奖品）统计
             cardData.forEach(card => {
                 if (!userMap.has(card.wechat)) userMap.set(card.wechat, { 
-                    wechat: card.wechat, phone: card.phone, 
+                    wechat: card.wechat, phone: card.phone, recipientName: card.recipientName || '',
                     orders: new Set(), cards: [], payTimes: [], 
                     activityDraws: { '0-1小时': 0, '1-6小时': 0, '6-24小时': 0 }, 
                     romanceDraws: 0, romanceOrders: 0, 
@@ -1158,7 +1162,7 @@
                 const validOrderCount = user.orders.size; // 现在orders里只有有效订单
                 
                 userData.push({
-                    wechat: user.wechat, phone: user.phone || '', orderCount: validOrderCount,
+                    wechat: user.wechat, phone: user.phone || '', recipientName: user.recipientName || '', orderCount: validOrderCount,
                     orderNos: [...user.orders].join(';'), items: itemList || '无', totalDraws,
                     firstPayTime: firstPayTime ? formatDate(firstPayTime) : '',
                     full10Time: full10Time ? formatDate(full10Time) : '', earlyBirdReward,
@@ -2080,29 +2084,67 @@
         }
 
         // ---------- 用户匹配 ----------
-        function findUserByPhoneOrder(phone, orderNo) {
-            const cleanPhone = String(phone || '').trim();
-            if (cleanPhone) {
-                const u = userData.find(x => String(x.phone || '').trim() === cleanPhone);
-                if (u) return u;
-                const digits = cleanPhone.replace(/[\s-]/g, '');
+        // 手机号归一化：去空格/全角空格/横线/括号，统一数字；+86/0086/86 开头的 11 位国内号去前缀；886/852 等海外号与短号保留原样
+        function normalizePhone(v) {
+            if (v === null || v === undefined) return '';
+            let s = String(v).replace(/[\s\u2006\u00A0\u3000\-—–（）()]/g, '');
+            s = s.replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+            if (!s) return '';
+            const m = s.match(/^(?:\+?86|0086)(\d{11})$/);
+            if (m) return m[1];
+            if (s.startsWith('+')) s = s.slice(1);
+            return s;
+        }
+
+        // 多级匹配链：1) 归一化手机号 → 2) 订单号 → 3) 昵称(下单账号) → 4) 收件人姓名
+        // 返回 { user, matchedKey, triedKeys }
+        function findUserByPhoneOrderDetail(phone, orderNo, nickname, name) {
+            const triedKeys = [];
+            const cleanPhone = normalizePhone(phone);
+            if (cleanPhone && cleanPhone.length >= 6) {
+                triedKeys.push('手机号');
+                const u = userData.find(x => normalizePhone(x.phone) === cleanPhone);
+                if (u) return { user: u, matchedKey: '手机号', triedKeys };
                 const u2 = userData.find(x => {
-                    const p = String(x.phone || '').trim().replace(/[\s-]/g, '');
-                    return p && (p.includes(digits) || digits.includes(p));
+                    const p = normalizePhone(x.phone);
+                    return p && p.length >= 6 && (p.includes(cleanPhone) || cleanPhone.includes(p));
                 });
-                if (u2) return u2;
+                if (u2) return { user: u2, matchedKey: '手机号(模糊)', triedKeys };
             }
             const cleanOrder = String(orderNo || '').trim();
             if (cleanOrder) {
+                triedKeys.push('订单号');
                 const u3 = userData.find(x => {
                     const nos = String(x.orderNos || '').split(';').map(s => s.trim()).filter(Boolean);
                     if (nos.includes(cleanOrder)) return true;
                     if (cleanOrder.length >= 6) return nos.some(n => n.length >= 6 && cleanOrder.includes(n));
                     return false;
                 });
-                if (u3) return u3;
+                if (u3) return { user: u3, matchedKey: '订单号', triedKeys };
             }
-            return null;
+            const cleanNick = String(nickname || '').replace(/\s+/g, '');
+            if (cleanNick) {
+                triedKeys.push('昵称');
+                const u4 = userData.find(x => {
+                    const w = String(x.wechat || '').replace(/\s+/g, '');
+                    return w && (w === cleanNick || w.includes(cleanNick) || cleanNick.includes(w));
+                });
+                if (u4) return { user: u4, matchedKey: '昵称', triedKeys };
+            }
+            const cleanName = String(name || '').replace(/\s+/g, '');
+            if (cleanName) {
+                triedKeys.push('收件人姓名');
+                const u5 = userData.find(x => {
+                    const n = String(x.recipientName || '').replace(/\s+/g, '');
+                    return n && (n === cleanName || n.includes(cleanName) || cleanName.includes(n));
+                });
+                if (u5) return { user: u5, matchedKey: '收件人姓名', triedKeys };
+            }
+            return { user: null, matchedKey: '', triedKeys };
+        }
+
+        function findUserByPhoneOrder(phone, orderNo, nickname, name) {
+            return findUserByPhoneOrderDetail(phone, orderNo, nickname, name).user;
         }
 
         // ---------- 碎卡兑换表上传 ----------
@@ -2143,7 +2185,9 @@
                 suikaSubmissions = groupSuikaRowsFromWb(wb);
                 userCardCountsMap = buildUserCardCounts(rawOrdersData);
                 suikaSubmissions.forEach(s => {
-                    s.user = findUserByPhoneOrder(s.phone, s.orderNo);
+                    const matched = findUserByPhoneOrderDetail(s.phone, s.orderNo, s.nickname, s.name);
+                    s.user = matched.user;
+                    s.userMatch = matched;
                     s.audit = auditSubmission(s);
                 });
                 suikaAuditMap = {};
@@ -2156,9 +2200,9 @@
                 renderSuikaResults();
                 document.getElementById('suikaResultSection').classList.remove('hidden');
                 document.getElementById('suikaResultSection').scrollIntoView({ behavior: 'smooth' });
-                const passN = suikaSubmissions.filter(s => s.audit.pass).length;
-                const notFound = suikaSubmissions.filter(s => !s.user).length;
-                alert(`碎卡兑换审核完成：共 ${suikaSubmissions.length} 个提交，通过 ${passN} 个，不通过 ${suikaSubmissions.length - passN} 个（其中未找到用户 ${notFound} 个）。`);
+                const statusCount = { '通过': 0, '不通过': 0, '未找到用户': 0, '需人工复核': 0 };
+                suikaSubmissions.forEach(s => { statusCount[s.audit.status] = (statusCount[s.audit.status] || 0) + 1; });
+                alert(`碎卡兑换审核完成：共 ${suikaSubmissions.length} 个提交\n通过 ${statusCount['通过']} 个，不通过 ${statusCount['不通过']} 个\n未找到用户 ${statusCount['未找到用户']} 个，需人工复核 ${statusCount['需人工复核']} 个`);
             } catch (err) {
                 alert('碎卡兑换表解析失败：' + err.message);
             } finally {
@@ -2260,7 +2304,15 @@
                 const joined = String((rows[i] || []).join('|'));
                 if (joined.includes('序号') && joined.includes('编号')) { headerRow = i; break; }
             }
-            if (headerRow < 0) headerRow = 1;
+            if (headerRow < 0) {
+                if (rows.length === 0) throw new Error('碎卡兑换表内容为空，请检查是否选错文件。');
+                const firstRowText = String((rows[0] || []).join('|'));
+                const looksLikeSuika = firstRowText.includes('序号') || firstRowText.includes('编号') || firstRowText.includes('手机号');
+                if (!looksLikeSuika) {
+                    throw new Error('这看起来不是碎卡兑换表：未找到「序号/编号」表头列。请确认：\n1）上传的是碎卡兑换表（含序号、编号、手机号等列）；\n2）如需导入集赞兑换表，请使用下方「上传集赞兑换表」入口。');
+                }
+                headerRow = 1;
+            }
             const headers = rows[headerRow] || [];
             const col = (names) => {
                 for (let i = 0; i < headers.length; i++) {
@@ -2410,33 +2462,46 @@
             return map;
         }
 
-        // ---------- 碎卡兑换审核核心逻辑 ----------
+        // ---------- 碎卡兑换审核核心逻辑（四态：通过/不通过/未找到用户/需人工复核） ----------
         function auditSubmission(sub) {
             const user = sub.user;
             const userCards = user ? (userCardCountsMap[user.wechat] ? userCardCountsMap[user.wechat].counts : {}) : {};
+            const triedKeys = (sub.userMatch && sub.userMatch.triedKeys) ? sub.userMatch.triedKeys : [];
             sub.requests.forEach(req => {
-                req.audit = auditRequest(req, user, userCards);
+                req.audit = auditRequest(req, user, userCards, triedKeys);
             });
-            const pass = sub.requests.every(r => r.audit.pass);
-            return { pass };
+            let hasPass = true, hasFail = false, hasNotFound = false, hasReview = false;
+            sub.requests.forEach(r => {
+                if (r.audit.type === '未找到用户') hasNotFound = true;
+                else if (r.audit.type === '需人工复核') hasReview = true;
+                else if (r.audit.type === '不通过') hasFail = true;
+                if (!r.audit.pass) hasPass = false;
+            });
+            const status = hasNotFound ? '未找到用户' : (hasReview ? '需人工复核' : ((hasFail || !hasPass) ? '不通过' : '通过'));
+            return { pass: status === '通过', status };
         }
 
-        function auditRequest(req, user, userCards) {
+        function auditRequest(req, user, userCards, triedKeys) {
             const reasons = [];
             const inNorm = normalizeCardId(req.inCard);
             const inQty = req.inQty > 0 ? req.inQty : 1;
 
-            if (req.review) {
-                return { pass: false, type: '需人工复核', usedDraws: 0, inCard: inNorm || req.inCard || '', inQty, reasons: ['换出卡明细格式复杂（含端盒/长文本），需人工复核'] };
-            }
-            if (!inNorm) {
-                return { pass: false, type: '无法识别', usedDraws: 0, inCard: '', inQty, reasons: ['换入卡面无法识别：' + (req.inCard || '（空）')] };
-            }
-            if (req.multiIn && req.outCards.length === 0) {
-                return { pass: false, type: '需人工复核', usedDraws: 0, inCard: inNorm, inQty, reasons: ['换入卡含多卡面且无独立换出明细，需人工拆分核对'] };
-            }
+            // 1) 未找到用户：匹配链（归一化手机号→订单号→昵称→收件人姓名）均未命中
             if (!user) {
-                return { pass: false, type: '未匹配', usedDraws: 0, inCard: inNorm, inQty, reasons: ['未找到用户'] };
+                const tried = (triedKeys && triedKeys.length > 0 ? triedKeys.join('、') : '手机号/订单号/昵称/收件人姓名');
+                return { pass: false, type: '未找到用户', usedDraws: 0, inCard: inNorm || req.inCard || '', inQty, reasons: [`未找到用户（已尝试按${tried}匹配，均未命中）`] };
+            }
+            // 2) 需人工复核：换出卡明细格式复杂/端盒/长文本/无法解析
+            if (req.review) {
+                return { pass: false, type: '需人工复核', usedDraws: 0, inCard: inNorm || req.inCard || '', inQty, reasons: ['换出卡填写格式错误（未用标点分隔/格式复杂），需人工复核'] };
+            }
+            // 3) 需人工复核：换入卡面无法识别
+            if (!inNorm) {
+                return { pass: false, type: '需人工复核', usedDraws: 0, inCard: '', inQty, reasons: ['换入卡面无法识别：' + (req.inCard || '（空）')] };
+            }
+            // 4) 需人工复核：换出卡空白（未填写换出卡明细）
+            if (req.outCards.length === 0) {
+                return { pass: false, type: '需人工复核', usedDraws: 0, inCard: inNorm, inQty, reasons: ['换出卡空白（未填写换出卡明细），需人工核实'] };
             }
 
             const isInSR = /^SR\d/.test(inNorm);
@@ -2469,7 +2534,7 @@
             // b. 换出卡总张数
             const requiredOut = isSSRSwap ? (1 * inQty) : (6 * inQty);
             if (totalOut !== requiredOut) {
-                reasons.push(`换出卡总张数不为${requiredOut}（实际${totalOut}张）`);
+                reasons.push(`换出卡总张数不为${requiredOut}（实际${totalOut}张），请检查是否漏填或合并填写`);
             }
 
             // c. 换出卡类型
@@ -2499,26 +2564,41 @@
                 if (!isInSR) reasons.push('36抽换SR换入卡面应以SR开头');
             }
 
-            return { pass: reasons.length === 0, type, usedDraws, inCard: inNorm, inQty, reasons };
+            const pass = reasons.length === 0;
+            return { pass, type: pass ? '通过' : '不通过', usedDraws, inCard: inNorm, inQty, reasons };
         }
 
-        // ---------- 碎卡审核结果渲染 ----------
+        // ---------- 碎卡审核结果渲染（四态） ----------
         function renderSuikaResults() {
             const submissions = suikaSubmissions;
             const totalSubmits = submissions.length;
-            let passCount = 0, failCount = 0, totalRequests = 0;
+            let passCount = 0, failCount = 0, notFoundCount = 0, reviewCount = 0, totalRequests = 0;
             submissions.forEach(s => {
                 totalRequests += s.requests.length;
-                if (s.audit.pass) passCount++; else failCount++;
+                if (s.audit.status === '通过') passCount++;
+                else if (s.audit.status === '不通过') failCount++;
+                else if (s.audit.status === '未找到用户') notFoundCount++;
+                else if (s.audit.status === '需人工复核') reviewCount++;
             });
             document.getElementById('suikaTotalSubmits').textContent = totalSubmits;
             document.getElementById('suikaTotalRequests').textContent = totalRequests;
             document.getElementById('suikaPassCount').textContent = passCount;
             document.getElementById('suikaFailCount').textContent = failCount;
+            document.getElementById('suikaNotFoundCount').textContent = notFoundCount;
+            document.getElementById('suikaReviewCount').textContent = reviewCount;
+
+            const statusMeta = {
+                '通过': { bg: '#f0fdf4', color: '#059669', badge: '✓ 通过' },
+                '不通过': { bg: '#fef2f2', color: '#ef4444', badge: '✗ 不通过' },
+                '未找到用户': { bg: '#fff7ed', color: '#ea580c', badge: '⚠ 未找到用户' },
+                '需人工复核': { bg: '#fefce8', color: '#ca8a04', badge: '◍ 需人工复核' }
+            };
 
             const tbody = document.getElementById('suikaResultBody');
             tbody.innerHTML = submissions.map(s => {
                 const user = s.user;
+                const status = s.audit.status || (s.audit.pass ? '通过' : '不通过');
+                const meta = statusMeta[status] || statusMeta['不通过'];
                 const typeStr = s.requests.map(r => r.audit.type).filter((v, i, a) => a.indexOf(v) === i).join('、');
                 const inStr = s.requests.map(r => r.audit.inCard ? (r.audit.inCard + (r.audit.inQty > 1 ? 'x' + r.audit.inQty : '')) : (r.inCard || '（空）')).join('、');
                 const outStr = s.requests.map(r => r.outCards.map(o => o.card + ((o.qty || 0) > 1 ? 'x' + o.qty : '')).join('、')).join(' ； ');
@@ -2526,10 +2606,8 @@
                     if (r.audit.pass) return '';
                     return (s.requests.length > 1 ? `[请求${ri + 1}] ` : '') + r.audit.reasons.join('；');
                 }).filter(Boolean).join('<br>');
-                const pass = s.audit.pass;
-                const bg = pass ? '#f0fdf4' : '#fef2f2';
-                const badge = pass ? '<span style="color:#059669;font-weight:bold;">✓ 通过</span>' : '<span style="color:#ef4444;font-weight:bold;">✗ 不通过</span>';
-                return `<tr style="background:${bg};">
+                const badge = `<span style="color:${meta.color};font-weight:bold;">${meta.badge}</span>`;
+                return `<tr style="background:${meta.bg};">
                     <td>${s.code}</td>
                     <td>${s.nickname || '-'}</td>
                     <td>${s.phone || '-'}</td>
@@ -2538,37 +2616,70 @@
                     <td>${inStr || '-'}</td>
                     <td style="max-width:260px;font-size:12px;">${outStr || '-'}</td>
                     <td>${badge}</td>
-                    <td style="max-width:320px;font-size:12px;color:${pass ? '#059669' : '#ef4444'};">${reasonStr || '通过'}</td>
+                    <td style="max-width:320px;font-size:12px;color:${meta.color};">${reasonStr || status}</td>
                 </tr>`;
             }).join('');
         }
 
-        // ---------- 碎卡审核结果导出 ----------
-        function exportSuikaResult() {
-            if (!suikaSubmissions || suikaSubmissions.length === 0) { alert('请先上传并审核碎卡兑换表'); return; }
-            const headers = ['提交编号', '昵称', '收件人姓名', '手机号', '订单号', '匹配用户', '总抽数', '兑换请求序号', '兑换类型', '换入卡面', '换入张数', '换出卡明细', '换出总张数', '审核结果', '原因明细', '提交时间'];
-            const data = [];
+        // ---------- 碎卡审核结果导出（四态多Sheet） ----------
+        function buildSuikaRequestRows() {
+            const rows = [];
             suikaSubmissions.forEach(s => {
                 s.requests.forEach((r, ri) => {
-                    data.push([
-                        s.code, s.nickname, s.name, s.phone, s.orderNo,
-                        s.user ? s.user.wechat : '未找到用户',
-                        s.user ? s.user.totalDraws : '',
-                        ri + 1, r.audit.type,
-                        r.audit.inCard || r.inCard || '', r.inQty,
-                        r.outCards.map(o => o.card + ((o.qty || 0) > 1 ? 'x' + o.qty : '')).join('、'),
-                        r.outCards.reduce((sum, o) => sum + (o.qty || 0), 0),
-                        r.audit.pass ? '通过' : '不通过',
-                        r.audit.reasons.join('；'),
-                        s.submitTime
-                    ]);
+                    rows.push({
+                        code: s.code, nickname: s.nickname, phone: s.phone, orderNo: s.orderNo,
+                        user: s.user, ri: ri + 1, audit: r.audit,
+                        inCard: r.audit.inCard || r.inCard || '', inQty: r.inQty,
+                        outStr: r.outCards.map(o => o.card + ((o.qty || 0) > 1 ? 'x' + o.qty : '')).join('、'),
+                        totalOut: r.outCards.reduce((sum, o) => sum + (o.qty || 0), 0),
+                        submitTime: s.submitTime
+                    });
                 });
             });
-            const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
-            ws['!cols'] = headers.map((h, i) => ({ wch: i === 13 ? 60 : (i === 11 ? 40 : 16) }));
+            return rows;
+        }
+
+        function exportSuikaResult() {
+            if (!suikaSubmissions || suikaSubmissions.length === 0) { alert('请先上传并审核碎卡兑换表'); return; }
+            const rows = buildSuikaRequestRows();
+            const byStatus = { '通过': [], '不通过': [], '未找到用户': [], '需人工复核': [] };
+            rows.forEach(r => { (byStatus[r.audit.type] || byStatus['不通过']).push(r); });
+
+            const passHeaders = ['提交编号', '昵称', '手机号', '订单号', '兑换类型', '换入卡面', '换出卡明细', '提交时间'];
+            const failHeaders = ['提交编号', '昵称', '手机号', '订单号', '兑换类型', '换入卡面', '换入张数', '换出卡明细', '换出总张数', '原因明细', '提交时间'];
+            const notFoundHeaders = ['提交编号', '昵称', '原始手机号', '订单号', '换入卡面', '换出卡明细', '疑似原因', '提交时间'];
+            const reviewHeaders = ['提交编号', '昵称', '手机号', '订单号', '兑换类型', '换入卡面', '换入张数', '换出卡明细', '换出总张数', '原因明细', '提交时间'];
+
+            const passData = byStatus['通过'].map(r => [r.code, r.nickname, r.phone, r.orderNo, r.audit.type, r.inCard, r.outStr, r.submitTime]);
+            const failData = byStatus['不通过'].map(r => [r.code, r.nickname, r.phone, r.orderNo, r.audit.type, r.inCard, r.inQty, r.outStr, r.totalOut, r.audit.reasons.join('；'), r.submitTime]);
+            const notFoundData = byStatus['未找到用户'].map(r => [r.code, r.nickname, r.phone, r.orderNo, r.inCard, r.outStr, r.audit.reasons.join('；'), r.submitTime]);
+            const reviewData = byStatus['需人工复核'].map(r => [r.code, r.nickname, r.phone, r.orderNo, r.audit.type, r.inCard, r.inQty, r.outStr, r.totalOut, r.audit.reasons.join('；'), r.submitTime]);
+
             const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, '碎卡兑换审核结果');
+            const mkSheet = (name, headers, data) => {
+                const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
+                ws['!cols'] = headers.map((h, i) => ({ wch: (i === 6 || i === 9) ? 60 : 16 }));
+                XLSX.utils.book_append_sheet(wb, ws, name);
+            };
+            mkSheet('通过审核', passHeaders, passData);
+            mkSheet('不通过审核', failHeaders, failData);
+            mkSheet('未找到用户', notFoundHeaders, notFoundData);
+            mkSheet('需人工复核', reviewHeaders, reviewData);
             XLSX.writeFile(wb, getTimestampFilename('碎卡兑换审核结果'));
+        }
+
+        // 导出未匹配用户清单（独立按钮，即"未找到用户"Sheet）
+        function exportSuikaNotFound() {
+            if (!suikaSubmissions || suikaSubmissions.length === 0) { alert('请先上传并审核碎卡兑换表'); return; }
+            const rows = buildSuikaRequestRows().filter(r => r.audit.type === '未找到用户');
+            if (rows.length === 0) { alert('本次审核没有未找到用户的记录'); return; }
+            const headers = ['提交编号', '昵称', '原始手机号', '订单号', '换入卡面', '换出卡明细', '疑似原因', '提交时间'];
+            const data = rows.map(r => [r.code, r.nickname, r.phone, r.orderNo, r.inCard, r.outStr, r.audit.reasons.join('；'), r.submitTime]);
+            const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
+            ws['!cols'] = headers.map((h, i) => ({ wch: (i === 5 || i === 6) ? 60 : 16 }));
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, '未匹配用户清单');
+            XLSX.writeFile(wb, getTimestampFilename('碎卡未匹配用户清单'));
         }
 
         // ---------- 集赞兑换表上传 ----------
@@ -2623,7 +2734,8 @@
             const snPass = findSheet(['审核通过'], ['重复', '不通过']);
             if (snPass) {
                 const rows = XLSX.utils.sheet_to_json(wb.Sheets[snPass], { header: 1, defval: '' });
-                for (let i = 1; i < rows.length; i++) {
+                const startRow = (rows.length > 0 && String((rows[0] || []).join('|')).includes('手机号')) ? 1 : 0;
+                for (let i = startRow; i < rows.length; i++) {
                     const r = rows[i] || [];
                     const phone = String(r[0] || '').trim();
                     const card = String(r[1] || '').trim();
@@ -2636,7 +2748,8 @@
             const snRepeat = findSheet(['重复'], ['不通过']);
             if (snRepeat) {
                 const rows = XLSX.utils.sheet_to_json(wb.Sheets[snRepeat], { header: 1, defval: '' });
-                for (let i = 1; i < rows.length; i++) {
+                const startRow = (rows.length > 0 && String((rows[0] || []).join('|')).includes('手机号')) ? 1 : 0;
+                for (let i = startRow; i < rows.length; i++) {
                     const r = rows[i] || [];
                     const phone = String(r[2] || '').trim();
                     const card = String(r[3] || '').trim();
@@ -2649,7 +2762,8 @@
             const snFail = findSheet(['不通过']);
             if (snFail) {
                 const rows = XLSX.utils.sheet_to_json(wb.Sheets[snFail], { header: 1, defval: '' });
-                for (let i = 1; i < rows.length; i++) {
+                const startRow = (rows.length > 0 && String((rows[0] || []).join('|')).includes('手机号')) ? 1 : 0;
+                for (let i = startRow; i < rows.length; i++) {
                     const r = rows[i] || [];
                     const phone = String(r[2] || '').trim();
                     const card = String(r[5] || '').trim();
@@ -2657,6 +2771,9 @@
                     if (!phone && !orderNo) continue;
                     result.fail.push({ phone, card, orderNo });
                 }
+            }
+            if (!snPass && !snRepeat && !snFail) {
+                throw new Error('未找到「审核通过 / 重复填问卷 / 审核不通过」任一 Sheet，请确认上传的是集赞兑换表；若上传的是碎卡表，请使用上方「上传碎卡兑换表」入口。');
             }
             return result;
         }
@@ -2744,11 +2861,13 @@
         // ---------- 用户详情面板 ----------
         function renderUserDetail(user) {
             const suikaInfos = suikaAuditMap[user.wechat] || [];
+            const suikaMeta = { '通过': '#059669', '不通过': '#ef4444', '未找到用户': '#ea580c', '需人工复核': '#ca8a04' };
             const suikaHtml = suikaInfos.length > 0
                 ? suikaInfos.map(s => {
-                    const pass = s.audit.pass;
+                    const status = s.audit.status || (s.audit.pass ? '通过' : '不通过');
+                    const color = suikaMeta[status] || '#ef4444';
                     const detail = s.requests.map(r => r.audit.type + (r.audit.reasons.length ? '（' + r.audit.reasons.join('；') + '）' : '')).join('；');
-                    return `<div style="font-size:12px;line-height:1.7;${pass ? 'color:#059669;' : 'color:#ef4444;'}">【${s.code}】${pass ? '通过' : '不通过'}：${detail}</div>`;
+                    return `<div style="font-size:12px;line-height:1.7;color:${color};">【${s.code}】${status}：${detail}</div>`;
                 }).join('')
                 : '<div style="color:#999;font-size:12px;">未导入碎卡兑换表或无该用户记录</div>';
 
