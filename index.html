@@ -115,6 +115,79 @@
             <div id="fileList" style="margin-top: 15px; color: #666;"></div>
         </div>
 
+        <div class="upload-section">
+            <div class="upload-box" id="suikaUploadBox">
+                <div>📁</div>
+                <h3>上传碎卡兑换表</h3>
+                <p>支持 .xlsx、.xls 和 .csv 格式，单个文件（先上传主订单数据并点击开始分析后使用）</p>
+            </div>
+            <input type="file" id="suikaFileInput" accept=".xlsx,.xls,.csv">
+            <button class="btn" id="suikaAnalyzeBtn" disabled>开始审核</button>
+            <div id="suikaFileList" style="margin-top: 15px; color: #666;"></div>
+        </div>
+
+        <div id="suikaResultSection" class="hidden">
+            <div class="stats-grid">
+                <div class="stat-card"><div class="value" id="suikaTotalSubmits">-</div><div class="label">总提交数</div></div>
+                <div class="stat-card"><div class="value" id="suikaTotalRequests">-</div><div class="label">总兑换请求</div></div>
+                <div class="stat-card"><div class="value" id="suikaPassCount" style="color:#059669;">-</div><div class="label">通过提交数</div></div>
+                <div class="stat-card"><div class="value" id="suikaFailCount" style="color:#ef4444;">-</div><div class="label">不通过提交数</div></div>
+            </div>
+            <div class="table-section">
+                <div class="table-header">
+                    <h3>🔍 碎卡兑换审核结果</h3>
+                    <div>
+                        <span style="font-size:12px;color:#999;margin-right:10px;">绿色=通过，红色=不通过</span>
+                        <button class="btn btn-sm" onclick="exportSuikaResult()">📥 导出审核结果Excel</button>
+                    </div>
+                </div>
+                <div class="table-wrapper" style="max-height:600px;">
+                    <table id="suikaResultTable">
+                        <thead>
+                            <tr>
+                                <th>提交编号</th><th>昵称</th><th>手机号</th><th>总抽数</th>
+                                <th>兑换类型</th><th>换入卡面</th><th>换出卡明细</th>
+                                <th>审核结果</th><th>原因明细</th>
+                            </tr>
+                        </thead>
+                        <tbody id="suikaResultBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="upload-section">
+            <div class="upload-box" id="jizanUploadBox">
+                <div>📁</div>
+                <h3>上传集赞兑换表</h3>
+                <p>支持 .xlsx、.xls 和 .csv 格式，单个文件（含「审核通过」「重复填问卷」「审核不通过」3个Sheet）</p>
+            </div>
+            <input type="file" id="jizanFileInput" accept=".xlsx,.xls,.csv">
+            <button class="btn" id="jizanAnalyzeBtn" disabled>开始导入</button>
+            <div id="jizanFileList" style="margin-top: 15px; color: #666;"></div>
+        </div>
+
+        <div id="jizanResultSection" class="hidden">
+            <div class="table-section">
+                <div class="table-header">
+                    <h3>📋 集赞兑换导入结果</h3>
+                    <button class="btn btn-sm" onclick="exportJizanResult()">📥 导出集赞导入结果Excel</button>
+                </div>
+                <div id="jizanSummary"></div>
+            </div>
+            <div class="table-section">
+                <div class="table-header">
+                    <h3>⚠️ 集赞导入失败列表</h3>
+                </div>
+                <div class="table-wrapper">
+                    <table id="jizanFailTable">
+                        <thead><tr><th>来源Sheet</th><th>手机号/订单号</th><th>卡面编号</th><th>说明</th></tr></thead>
+                        <tbody id="jizanFailBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
         <div id="resultSection" class="hidden">
             <div class="stats-grid">
                 <div class="stat-card"><div class="value" id="totalUsers">-</div><div class="label">总用户数</div></div>
@@ -207,6 +280,7 @@
             </div>
 
             <div class="table-section">
+                <div id="userDetailPanel" class="hidden" style="padding: 16px 20px; margin-bottom: 14px; border-radius: 12px; background: linear-gradient(135deg, #f0f3ff, #fdf2ff); border: 1px solid #e0e7ff;"></div>
                 <div class="table-header">
                     <h3>📋 用户数据表格</h3>
                     <div>
@@ -394,6 +468,7 @@
                     allData = allData.concat(df);
                 }
                 
+                rawOrdersData = allData;
                 processData(allData);
                 renderRawData(allData);
                 renderCharts();
@@ -791,9 +866,10 @@
                 user.cards.forEach(c => cardCounts[c] = (cardCounts[c] || 0) + 1);
                 // 过滤掉活动奖品卡片（镜头签、惊喜加赠、限时小卡等），只显示基础盲盒卡片
                 const bonusKeywords = ['镜头签', '惊喜加赠', '限时小卡', '浪漫疯子', '周末', '终极'];
-                const itemList = uniqueCards
+                let itemList = uniqueCards
                     .filter(c => !bonusKeywords.some(k => c.includes(k)))
                     .map(c => `${c}x${cardCounts[c]}`).join('; ');
+                itemList = sortCards(itemList);
 
                 // 判断各活动区间的首次下单状态
                 // 浪漫疯子活动（7.13-7.15）：判断7.13之前是否有下单
@@ -1098,7 +1174,7 @@
                     finalDraws: user.finalDraws, finalEffectiveDraws, finalJingtouqian, finalZhouzheng, finalKaitui, finalSetCount, finalCondition,
                     xuanchuanGift: '无', // 宣传集赞礼，默认值，待统计后填入卡片编号
                     buyouCount: user.buyouCount || 0, buyouOrders: user.buyouOrders || [],
-                    cardsBefore10: cardsBefore10.join(';'), cardList: uniqueCards.join(';')
+                    cardsBefore10: cardsBefore10.join(';'), cardList: sortCards(uniqueCards.join(';'))
                 });
             });
 
@@ -1704,6 +1780,14 @@
             } else {
                 filteredData = [...userData];
             }
+            // 详情面板：命中单个用户时展示详情卡片
+            const detailPanel = document.getElementById('userDetailPanel');
+            if (keyword && filteredData.length === 1) {
+                renderUserDetail(filteredData[0]);
+                detailPanel.classList.remove('hidden');
+            } else {
+                detailPanel.classList.add('hidden');
+            }
             renderTable(1);
         }
 
@@ -1932,6 +2016,768 @@
                 e.target.value = ''; // 重置选择
             }
         });
+
+        // ==================== 新增功能：卡片排序 / 碎卡兑换审核 / 集赞兑换导入 / 用户详情 ====================
+
+        // ---------- 全局变量 ----------
+        let rawOrdersData = null;          // 原始订单数据（用于审核核对卡面）
+        let suikaSubmissions = [];         // 碎卡兑换提交列表
+        let suikaAuditMap = {};            // 用户维度碎卡审核索引 {wechat: [提交]}
+        let userCardCountsMap = {};        // 用户卡面计数 {wechat: {卡面: 数量}}
+        let jizanExportData = null;        // 集赞导入导出数据
+
+        // ---------- 卡片排序工具 ----------
+        const CARD_RARITY_ORDER = { 'N': 0, 'R': 1, 'SR': 2, 'SSR': 3, 'SSSR': 4 };
+
+        function parseCardItem(str) {
+            if (!str) return null;
+            let s = String(str).trim();
+            if (!s) return null;
+            let qty = 1;
+            const qm = s.match(/[x×*]\s*(\d+)/i);
+            if (qm) { qty = parseInt(qm[1], 10) || 1; s = s.replace(/[x×*]\s*\d+/i, '').trim(); }
+            const clean = s.toUpperCase().replace(/[\s\u2006\u00A0]+/g, '');
+            const mm = clean.match(/^(SSSR|SSR|SR|R|N)(\d+)$/);
+            if (mm) return { name: mm[1] + mm[2], qty, type: mm[1], num: parseInt(mm[2], 10), raw: s };
+            return { name: clean, qty, type: 'UNKNOWN', num: null, raw: s };
+        }
+
+        function sortCards(cardListStr) {
+            if (!cardListStr) return '';
+            const parts = String(cardListStr).split(';').map(p => p.trim()).filter(Boolean);
+            const parsed = parts.map(parseCardItem).filter(Boolean);
+            parsed.sort((a, b) => {
+                const ta = CARD_RARITY_ORDER.hasOwnProperty(a.type) ? CARD_RARITY_ORDER[a.type] : 99;
+                const tb = CARD_RARITY_ORDER.hasOwnProperty(b.type) ? CARD_RARITY_ORDER[b.type] : 99;
+                if (ta !== tb) return ta - tb;
+                if (ta === 99) return String(a.name).localeCompare(String(b.name));
+                const na = a.num === null ? Number.MAX_SAFE_INTEGER : a.num;
+                const nb = b.num === null ? Number.MAX_SAFE_INTEGER : b.num;
+                if (na !== nb) return na - nb;
+                return String(a.name).localeCompare(String(b.name));
+            });
+            return parsed.map(p => p.qty > 1 ? `${p.name}x${p.qty}` : p.name).join('; ');
+        }
+
+        function normalizeCardId(str) {
+            if (str === null || str === undefined) return '';
+            const s = String(str).toUpperCase().replace(/[\s\u2006\u00A0\u3000]+/g, '').replace(/[卡面:：,，、]/g, '');
+            const m = s.match(/^(SSSR|SSR|SR|R|N)(\d+)$/);
+            return m ? m[1] + m[2] : '';
+        }
+
+        function parseQty(v) {
+            if (v === null || v === undefined) return 0;
+            if (typeof v === 'number') return Math.round(v);
+            const s = String(v).trim();
+            if (!s) return 0;
+            if (/^[0-9.]+$/.test(s)) return Math.round(parseFloat(s));
+            const m = s.match(/(\d+(?:\.\d+)?)/);
+            if (m) return Math.round(parseFloat(m[1]));
+            if (s.includes('一')) return 1;
+            if (s.includes('两') || s.includes('二')) return 2;
+            return 0;
+        }
+
+        // ---------- 用户匹配 ----------
+        function findUserByPhoneOrder(phone, orderNo) {
+            const cleanPhone = String(phone || '').trim();
+            if (cleanPhone) {
+                const u = userData.find(x => String(x.phone || '').trim() === cleanPhone);
+                if (u) return u;
+                const digits = cleanPhone.replace(/[\s-]/g, '');
+                const u2 = userData.find(x => {
+                    const p = String(x.phone || '').trim().replace(/[\s-]/g, '');
+                    return p && (p.includes(digits) || digits.includes(p));
+                });
+                if (u2) return u2;
+            }
+            const cleanOrder = String(orderNo || '').trim();
+            if (cleanOrder) {
+                const u3 = userData.find(x => {
+                    const nos = String(x.orderNos || '').split(';').map(s => s.trim()).filter(Boolean);
+                    if (nos.includes(cleanOrder)) return true;
+                    if (cleanOrder.length >= 6) return nos.some(n => n.length >= 6 && cleanOrder.includes(n));
+                    return false;
+                });
+                if (u3) return u3;
+            }
+            return null;
+        }
+
+        // ---------- 碎卡兑换表上传 ----------
+        const suikaUploadBox = document.getElementById('suikaUploadBox');
+        const suikaFileInput = document.getElementById('suikaFileInput');
+        const suikaAnalyzeBtn = document.getElementById('suikaAnalyzeBtn');
+        const suikaFileList = document.getElementById('suikaFileList');
+        let suikaFile = null;
+
+        suikaUploadBox.addEventListener('click', () => suikaFileInput.click());
+        suikaUploadBox.addEventListener('dragover', (e) => { e.preventDefault(); suikaUploadBox.classList.add('active'); });
+        suikaUploadBox.addEventListener('dragleave', () => suikaUploadBox.classList.remove('active'));
+        suikaUploadBox.addEventListener('drop', (e) => {
+            e.preventDefault();
+            suikaUploadBox.classList.remove('active');
+            if (e.dataTransfer.files.length > 0) setSuikaFile(e.dataTransfer.files[0]);
+        });
+        suikaFileInput.addEventListener('change', (e) => { if (e.target.files.length > 0) setSuikaFile(e.target.files[0]); });
+
+        function setSuikaFile(file) {
+            suikaFile = file;
+            suikaFileList.innerHTML = `<span style="background:#f0f0f0;padding:4px 12px;border-radius:12px;font-size:13px;">📄 ${file.name}</span>`;
+            suikaAnalyzeBtn.disabled = false;
+        }
+
+        suikaAnalyzeBtn.addEventListener('click', async () => {
+            if (!suikaFile) return;
+            if (!rawOrdersData || rawOrdersData.length === 0) { alert('请先上传主订单数据并点击「开始分析」后再审核'); return; }
+            suikaAnalyzeBtn.disabled = true;
+            try {
+                const buf = await suikaFile.arrayBuffer();
+                let wb;
+                if (suikaFile.name.toLowerCase().endsWith('.csv')) {
+                    wb = XLSX.read(new TextDecoder('GBK').decode(new Uint8Array(buf)), { type: 'string' });
+                } else {
+                    wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
+                }
+                suikaSubmissions = groupSuikaRowsFromWb(wb);
+                userCardCountsMap = buildUserCardCounts(rawOrdersData);
+                suikaSubmissions.forEach(s => {
+                    s.user = findUserByPhoneOrder(s.phone, s.orderNo);
+                    s.audit = auditSubmission(s);
+                });
+                suikaAuditMap = {};
+                suikaSubmissions.forEach(s => {
+                    if (s.user) {
+                        if (!suikaAuditMap[s.user.wechat]) suikaAuditMap[s.user.wechat] = [];
+                        suikaAuditMap[s.user.wechat].push(s);
+                    }
+                });
+                renderSuikaResults();
+                document.getElementById('suikaResultSection').classList.remove('hidden');
+                document.getElementById('suikaResultSection').scrollIntoView({ behavior: 'smooth' });
+                const passN = suikaSubmissions.filter(s => s.audit.pass).length;
+                const notFound = suikaSubmissions.filter(s => !s.user).length;
+                alert(`碎卡兑换审核完成：共 ${suikaSubmissions.length} 个提交，通过 ${passN} 个，不通过 ${suikaSubmissions.length - passN} 个（其中未找到用户 ${notFound} 个）。`);
+            } catch (err) {
+                alert('碎卡兑换表解析失败：' + err.message);
+            } finally {
+                suikaAnalyzeBtn.disabled = false;
+            }
+        });
+
+        // ---------- 碎卡表解析（按编号分组） ----------
+        const CN_NUM = { '一': 1, '二': 2, '两': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '十': 10 };
+        function cnNumToInt(s) {
+            s = String(s || '').trim();
+            if (/^\d+$/.test(s)) return parseInt(s, 10);
+            if (CN_NUM[s] !== undefined) return CN_NUM[s];
+            return null;
+        }
+
+        // 解析换入卡单元格：可能含多卡面（如 'SR11，SR15'、'ssr7 sr5'）
+        function parseInCardCell(cellText) {
+            const cell = String(cellText || '').trim();
+            if (!cell) return [];
+            const normAll = normalizeCardId(cell);
+            if (normAll) return [normAll];
+            const parts = cell.split(/[、，,；;/\s]+/).map(s => s.trim()).filter(Boolean);
+            const cards = [];
+            parts.forEach(p => {
+                const n = normalizeCardId(p);
+                if (n) cards.push(n);
+            });
+            return cards;
+        }
+
+        // 解析换出卡单元格：支持多卡面（'R23、R32、R22…'）、显式配对（'5张r34'/'r34五张'）、数字序列（'1，1，1，4'）、'各一张'等
+        // 返回 { review: boolean, cards: [{card, qty}] }；review=true 表示格式复杂需人工复核
+        function parseOutCardCell(cellText, qtyText) {
+            const cell = String(cellText || '').trim();
+            const qty = String(qtyText || '').trim();
+            if (!cell) return { review: false, cards: [] };
+            if (cell.includes('端盒') || qty.includes('端盒') || cell.includes('（') || cell.includes('）') || cell.includes('(') || cell.includes(')')) {
+                return { review: true, cards: [{ card: cell, qty: parseQty(qty) }] };
+            }
+            const normAll = normalizeCardId(cell);
+            if (normAll) return { review: false, cards: [{ card: normAll, qty: parseQty(qty) }] };
+            const parts = cell.split(/[、，,；;/\s]+/).map(s => s.trim()).filter(Boolean);
+            if (parts.length === 0) return { review: false, cards: [] };
+            const norms = parts.map(p => normalizeCardId(p));
+            if (!norms.some(Boolean)) return { review: true, cards: [{ card: cell, qty: parseQty(qty) }] };
+
+            const explicit = {};
+            let m;
+            const re1 = /((?:SSSR|SSR|SR|R|N)\s*\d+)\s*([一二两三四五六七八九十]|\d+)\s*张/gi;
+            while ((m = re1.exec(qty)) !== null) {
+                const c = normalizeCardId(m[1]);
+                const v = cnNumToInt(m[2]);
+                if (c && v !== null) explicit[c] = v;
+            }
+            const re2 = /([一二两三四五六七八九十]|\d+)\s*张\s*((?:SSSR|SSR|SR|R|N)\s*\d+)/gi;
+            while ((m = re2.exec(qty)) !== null) {
+                const c = normalizeCardId(m[2]);
+                const v = cnNumToInt(m[1]);
+                if (c && v !== null) explicit[c] = v;
+            }
+            const result = [];
+            const remaining = [];
+            norms.forEach(n => {
+                if (!n) return;
+                if (explicit[n] !== undefined) result.push({ card: n, qty: explicit[n] });
+                else remaining.push(n);
+            });
+            if (remaining.length > 0) {
+                const nums = qty.match(/\d+/g) || [];
+                if (nums.length === remaining.length) {
+                    remaining.forEach((n, i) => result.push({ card: n, qty: parseInt(nums[i], 10) }));
+                    return { review: false, cards: result };
+                }
+                if (/各一|每张|各一张|一样一/.test(qty)) {
+                    remaining.forEach(n => result.push({ card: n, qty: 1 }));
+                    return { review: false, cards: result };
+                }
+                if (nums.length === 1 && parseInt(nums[0], 10) === remaining.length) {
+                    remaining.forEach(n => result.push({ card: n, qty: 1 }));
+                    return { review: false, cards: result };
+                }
+                return { review: true, cards: result.length > 0 ? result : [{ card: cell, qty: parseQty(qty) }] };
+            }
+            return { review: false, cards: result };
+        }
+
+        function getCell(row, i) {
+            if (i < 0) return '';
+            const v = row[i];
+            return (v === undefined || v === null) ? '' : String(v).trim();
+        }
+
+        function groupSuikaRowsFromWb(wb) {
+            const ws = wb.Sheets[wb.SheetNames[0]];
+            const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+            let headerRow = -1;
+            for (let i = 0; i < Math.min(6, rows.length); i++) {
+                const joined = String((rows[i] || []).join('|'));
+                if (joined.includes('序号') && joined.includes('编号')) { headerRow = i; break; }
+            }
+            if (headerRow < 0) headerRow = 1;
+            const headers = rows[headerRow] || [];
+            const col = (names) => {
+                for (let i = 0; i < headers.length; i++) {
+                    const h = String(headers[i] || '').trim();
+                    if (names.some(n => h.includes(n))) return i;
+                }
+                return -1;
+            };
+            const idx = {
+                seq: col(['序号']),
+                nickname: col(['昵称']),
+                name: col(['收件人姓名']),
+                phone: col(['微店手机号']),
+                order: col(['抽抽乐订单号', '订单号']),
+                outCard: col(['选择哪些卡面进行兑换', '已抽到的卡编号', '换出卡']),
+                outQty: col(['用来兑换的该卡张数', '换出张数']),
+                inCard: col(['希望兑换到的卡面', '换入卡']),
+                inQty: col(['希望兑换到该卡张数', '换入张数']),
+                time: col(['提交时间']),
+                code: col(['编号'])
+            };
+            // 修正：'编号'列不能误匹配 '已抽到的卡编号'（含'卡'）
+            for (let i = 0; i < headers.length; i++) {
+                if (String(headers[i] || '').trim() === '编号') { idx.code = i; break; }
+            }
+
+            const submissions = [];
+            let cur = null;
+            for (let i = headerRow + 1; i < rows.length; i++) {
+                const r = rows[i] || [];
+                const seq = getCell(r, idx.seq);
+                if (seq === '总计' || seq === '合计') continue;
+                const code = getCell(r, idx.code);
+                if (code) {
+                    cur = {
+                        code,
+                        nickname: getCell(r, idx.nickname),
+                        name: getCell(r, idx.name),
+                        phone: getCell(r, idx.phone),
+                        orderNo: getCell(r, idx.order),
+                        submitTime: getCell(r, idx.time),
+                        requests: [],
+                        pendingOut: []
+                    };
+                    submissions.push(cur);
+                }
+                if (!cur) continue;
+                const outCard = getCell(r, idx.outCard);
+                const outQtyRaw = getCell(r, idx.outQty);
+                const inCard = getCell(r, idx.inCard);
+                const inQtyRaw = getCell(r, idx.inQty);
+                if (inCard) {
+                    const inQtyNorm = normalizeCardId(inQtyRaw);
+                    let inCards;
+                    let inQtyNum = parseQty(inQtyRaw);
+                    if (inQtyNorm) {
+                        // inQty 列实际填的是另一张换入卡（如 'SR1 | SSR8'）
+                        inCards = parseInCardCell(inCard).concat([inQtyNorm]);
+                        inQtyNum = 1;
+                    } else {
+                        inCards = parseInCardCell(inCard);
+                    }
+                    if (inCards.length > 0) {
+                        inCards.forEach((c, ci) => {
+                            const req = {
+                                inCard: c,
+                                inQty: ci === 0 ? (inQtyNum > 0 ? inQtyNum : 1) : 1,
+                                outCards: [],
+                                multiIn: inCards.length > 1
+                            };
+                            cur.requests.push(req);
+                            if (ci === 0) cur._outTarget = req;
+                        });
+                    } else {
+                        const req = { inCard, inQty: inQtyNum > 0 ? inQtyNum : 1, outCards: [], badIn: true };
+                        cur.requests.push(req);
+                        cur._outTarget = req;
+                    }
+                }
+                if (outCard) {
+                    const parsed = parseOutCardCell(outCard, outQtyRaw);
+                    const target = cur._outTarget || (cur.requests.length > 0 ? cur.requests[cur.requests.length - 1] : null);
+                    if (parsed.review && target) target.review = true;
+                    if (target) {
+                        target.outCards = target.outCards.concat(parsed.cards);
+                    } else {
+                        cur.pendingOut = cur.pendingOut.concat(parsed.cards);
+                    }
+                }
+            }
+            submissions.forEach(s => {
+                if (s.requests.length === 0) {
+                    s.requests.push({ inCard: '', inQty: 1, outCards: s.pendingOut });
+                } else if (s.pendingOut.length > 0) {
+                    s.requests[0].outCards = s.pendingOut.concat(s.requests[0].outCards);
+                }
+                delete s.pendingOut;
+            });
+            return submissions;
+        }
+
+        // ---------- 构建用户卡面计数（复用 processData 的卡片解析逻辑） ----------
+        function buildUserCardCounts(df) {
+            const map = {};
+            df.forEach(row => {
+                const wechat = String(row['下单账号'] || row['账号'] || '').trim();
+                if (!wechat) return;
+                if (!map[wechat]) map[wechat] = { counts: {} };
+                const desc = row['订单描述'] !== undefined && row['订单描述'] !== null ? String(row['订单描述']) : '';
+                const gift = row['赠品'] !== undefined && row['赠品'] !== null ? String(row['赠品']) : '';
+                if (desc) {
+                    desc.split(';').forEach(item => {
+                        item = item.trim();
+                        if (!item || !item.includes('[购买数量:')) return;
+                        const namePart = item.split('[购买数量:')[0].trim();
+                        const qty = parseInt(item.split('[购买数量:')[1].replace(']', '').trim()) || 1;
+                        if (namePart.includes('盲盒商品')) return;
+                        if (namePart.includes('端盒') || namePart.includes('一键端盒')) return;
+                        let cardName = namePart
+                            .replace('周柯宇爱意正值炽夏小卡抽抽乐-', '')
+                            .replace('【补邮转链】「周柯宇 fully unlocked」爱意正值炽夏小卡抽抽乐.', '')
+                            .replace('「周柯宇 fully unlocked」爱意正值炽夏小卡抽抽乐-', '')
+                            .replace('爱意正值炽夏小卡抽抽乐-', '');
+                        if (cardName.endsWith('.')) cardName = cardName.slice(0, -1);
+                        if (cardName.includes('.')) cardName = cardName.split('.')[0] || cardName;
+                        if (!cardName) return;
+                        const packMatch = namePart.match(/(\d+)张/);
+                        const packSize = packMatch ? parseInt(packMatch[1]) : 1;
+                        const actualQty = qty * packSize;
+                        const norm = normalizeCardId(cardName);
+                        if (norm) map[wechat].counts[norm] = (map[wechat].counts[norm] || 0) + actualQty;
+                    });
+                }
+                if (gift && gift.includes('奖品')) {
+                    gift.split(';').forEach(g => {
+                        g = g.trim();
+                        if (!g || !g.includes('奖品')) return;
+                        const parts = g.split(':');
+                        if (parts.length < 2) return;
+                        const cardName = parts[1].trim();
+                        if (!cardName || cardName.includes('端盒')) return;
+                        const norm = normalizeCardId(cardName);
+                        if (norm) map[wechat].counts[norm] = (map[wechat].counts[norm] || 0) + 1;
+                    });
+                }
+            });
+            return map;
+        }
+
+        // ---------- 碎卡兑换审核核心逻辑 ----------
+        function auditSubmission(sub) {
+            const user = sub.user;
+            const userCards = user ? (userCardCountsMap[user.wechat] ? userCardCountsMap[user.wechat].counts : {}) : {};
+            sub.requests.forEach(req => {
+                req.audit = auditRequest(req, user, userCards);
+            });
+            const pass = sub.requests.every(r => r.audit.pass);
+            return { pass };
+        }
+
+        function auditRequest(req, user, userCards) {
+            const reasons = [];
+            const inNorm = normalizeCardId(req.inCard);
+            const inQty = req.inQty > 0 ? req.inQty : 1;
+
+            if (req.review) {
+                return { pass: false, type: '需人工复核', usedDraws: 0, inCard: inNorm || req.inCard || '', inQty, reasons: ['换出卡明细格式复杂（含端盒/长文本），需人工复核'] };
+            }
+            if (!inNorm) {
+                return { pass: false, type: '无法识别', usedDraws: 0, inCard: '', inQty, reasons: ['换入卡面无法识别：' + (req.inCard || '（空）')] };
+            }
+            if (req.multiIn && req.outCards.length === 0) {
+                return { pass: false, type: '需人工复核', usedDraws: 0, inCard: inNorm, inQty, reasons: ['换入卡含多卡面且无独立换出明细，需人工拆分核对'] };
+            }
+            if (!user) {
+                return { pass: false, type: '未匹配', usedDraws: 0, inCard: inNorm, inQty, reasons: ['未找到用户'] };
+            }
+
+            const isInSR = /^SR\d/.test(inNorm);
+            const isInSSR = /^SSR\d/.test(inNorm) || /^SSSR\d/.test(inNorm);
+
+            const totalOut = req.outCards.reduce((s, o) => s + (o.qty || 0), 0);
+            const allOutIsRSR = req.outCards.length > 0 && req.outCards.every(o => /^(R|SR|N)\d/.test(normalizeCardId(o.card)));
+            const allOutIsSSR = req.outCards.length > 0 && req.outCards.every(o => /^(SSR|SSSR)\d/.test(normalizeCardId(o.card)));
+
+            // 兑换类型判定：sr 且换出全r/sr且6张→36抽；ssr且换出1张ssr→72抽平换；其他→72抽换任意
+            let type, costPerUnit, isSSRSwap = false;
+            if (isInSR && totalOut === 6 * inQty && allOutIsRSR) {
+                type = '36抽换SR'; costPerUnit = 36;
+            } else if (isInSSR && req.outCards.length === 1 && totalOut === inQty && allOutIsSSR) {
+                type = '72抽SSR平换'; costPerUnit = 72; isSSRSwap = true;
+            } else if (isInSSR) {
+                type = '72抽换任意(SSR)'; costPerUnit = 72;
+            } else if (isInSR) {
+                type = '72抽换任意(SR)'; costPerUnit = 72;
+            } else {
+                type = '72抽换任意'; costPerUnit = 72;
+            }
+            const usedDraws = costPerUnit * inQty;
+
+            // a. 资格判断
+            if (user.totalDraws < usedDraws) {
+                reasons.push(`总抽数不足（需${usedDraws}抽，实际${user.totalDraws}抽）`);
+            }
+
+            // b. 换出卡总张数
+            const requiredOut = isSSRSwap ? (1 * inQty) : (6 * inQty);
+            if (totalOut !== requiredOut) {
+                reasons.push(`换出卡总张数不为${requiredOut}（实际${totalOut}张）`);
+            }
+
+            // c. 换出卡类型
+            if (isSSRSwap) {
+                if (!allOutIsSSR) reasons.push('SSR平换换出卡必须都是SSR');
+            } else {
+                const bad = req.outCards.filter(o => !/^(R|SR|N)\d/.test(normalizeCardId(o.card)));
+                if (bad.length > 0) reasons.push(`换出卡含SSR/异常，本类型仅允许r/sr（异常：${bad.map(o => o.card).join('、')}）`);
+            }
+
+            // d. 严格核对卡面+张数
+            req.outCards.forEach(o => {
+                const cNorm = normalizeCardId(o.card);
+                if (!cNorm) { reasons.push(`换出卡 ${o.card} 无法识别`); return; }
+                const actual = userCards[cNorm] || 0;
+                if (actual === 0) {
+                    reasons.push(`换出卡 ${cNorm} 未在该用户订单中抽到`);
+                } else if (actual < (o.qty || 0)) {
+                    reasons.push(`换出卡 ${cNorm} 数量不足（需${o.qty}张，实际${actual}张）`);
+                }
+            });
+
+            // e. 换入卡面合法性
+            if (isSSRSwap) {
+                if (!isInSSR) reasons.push('SSR平换换入必须是SSR');
+            } else if (type === '36抽换SR') {
+                if (!isInSR) reasons.push('36抽换SR换入卡面应以SR开头');
+            }
+
+            return { pass: reasons.length === 0, type, usedDraws, inCard: inNorm, inQty, reasons };
+        }
+
+        // ---------- 碎卡审核结果渲染 ----------
+        function renderSuikaResults() {
+            const submissions = suikaSubmissions;
+            const totalSubmits = submissions.length;
+            let passCount = 0, failCount = 0, totalRequests = 0;
+            submissions.forEach(s => {
+                totalRequests += s.requests.length;
+                if (s.audit.pass) passCount++; else failCount++;
+            });
+            document.getElementById('suikaTotalSubmits').textContent = totalSubmits;
+            document.getElementById('suikaTotalRequests').textContent = totalRequests;
+            document.getElementById('suikaPassCount').textContent = passCount;
+            document.getElementById('suikaFailCount').textContent = failCount;
+
+            const tbody = document.getElementById('suikaResultBody');
+            tbody.innerHTML = submissions.map(s => {
+                const user = s.user;
+                const typeStr = s.requests.map(r => r.audit.type).filter((v, i, a) => a.indexOf(v) === i).join('、');
+                const inStr = s.requests.map(r => r.audit.inCard ? (r.audit.inCard + (r.audit.inQty > 1 ? 'x' + r.audit.inQty : '')) : (r.inCard || '（空）')).join('、');
+                const outStr = s.requests.map(r => r.outCards.map(o => o.card + ((o.qty || 0) > 1 ? 'x' + o.qty : '')).join('、')).join(' ； ');
+                const reasonStr = s.requests.map((r, ri) => {
+                    if (r.audit.pass) return '';
+                    return (s.requests.length > 1 ? `[请求${ri + 1}] ` : '') + r.audit.reasons.join('；');
+                }).filter(Boolean).join('<br>');
+                const pass = s.audit.pass;
+                const bg = pass ? '#f0fdf4' : '#fef2f2';
+                const badge = pass ? '<span style="color:#059669;font-weight:bold;">✓ 通过</span>' : '<span style="color:#ef4444;font-weight:bold;">✗ 不通过</span>';
+                return `<tr style="background:${bg};">
+                    <td>${s.code}</td>
+                    <td>${s.nickname || '-'}</td>
+                    <td>${s.phone || '-'}</td>
+                    <td>${user ? user.totalDraws : '-'}</td>
+                    <td>${typeStr || '-'}</td>
+                    <td>${inStr || '-'}</td>
+                    <td style="max-width:260px;font-size:12px;">${outStr || '-'}</td>
+                    <td>${badge}</td>
+                    <td style="max-width:320px;font-size:12px;color:${pass ? '#059669' : '#ef4444'};">${reasonStr || '通过'}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        // ---------- 碎卡审核结果导出 ----------
+        function exportSuikaResult() {
+            if (!suikaSubmissions || suikaSubmissions.length === 0) { alert('请先上传并审核碎卡兑换表'); return; }
+            const headers = ['提交编号', '昵称', '收件人姓名', '手机号', '订单号', '匹配用户', '总抽数', '兑换请求序号', '兑换类型', '换入卡面', '换入张数', '换出卡明细', '换出总张数', '审核结果', '原因明细', '提交时间'];
+            const data = [];
+            suikaSubmissions.forEach(s => {
+                s.requests.forEach((r, ri) => {
+                    data.push([
+                        s.code, s.nickname, s.name, s.phone, s.orderNo,
+                        s.user ? s.user.wechat : '未找到用户',
+                        s.user ? s.user.totalDraws : '',
+                        ri + 1, r.audit.type,
+                        r.audit.inCard || r.inCard || '', r.inQty,
+                        r.outCards.map(o => o.card + ((o.qty || 0) > 1 ? 'x' + o.qty : '')).join('、'),
+                        r.outCards.reduce((sum, o) => sum + (o.qty || 0), 0),
+                        r.audit.pass ? '通过' : '不通过',
+                        r.audit.reasons.join('；'),
+                        s.submitTime
+                    ]);
+                });
+            });
+            const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
+            ws['!cols'] = headers.map((h, i) => ({ wch: i === 13 ? 60 : (i === 11 ? 40 : 16) }));
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, '碎卡兑换审核结果');
+            XLSX.writeFile(wb, getTimestampFilename('碎卡兑换审核结果'));
+        }
+
+        // ---------- 集赞兑换表上传 ----------
+        const jizanUploadBox = document.getElementById('jizanUploadBox');
+        const jizanFileInput = document.getElementById('jizanFileInput');
+        const jizanAnalyzeBtn = document.getElementById('jizanAnalyzeBtn');
+        const jizanFileList = document.getElementById('jizanFileList');
+        let jizanFile = null;
+
+        jizanUploadBox.addEventListener('click', () => jizanFileInput.click());
+        jizanUploadBox.addEventListener('dragover', (e) => { e.preventDefault(); jizanUploadBox.classList.add('active'); });
+        jizanUploadBox.addEventListener('dragleave', () => jizanUploadBox.classList.remove('active'));
+        jizanUploadBox.addEventListener('drop', (e) => {
+            e.preventDefault();
+            jizanUploadBox.classList.remove('active');
+            if (e.dataTransfer.files.length > 0) setJizanFile(e.dataTransfer.files[0]);
+        });
+        jizanFileInput.addEventListener('change', (e) => { if (e.target.files.length > 0) setJizanFile(e.target.files[0]); });
+
+        function setJizanFile(file) {
+            jizanFile = file;
+            jizanFileList.innerHTML = `<span style="background:#f0f0f0;padding:4px 12px;border-radius:12px;font-size:13px;">📄 ${file.name}</span>`;
+            jizanAnalyzeBtn.disabled = false;
+        }
+
+        jizanAnalyzeBtn.addEventListener('click', async () => {
+            if (!jizanFile) return;
+            if (!rawOrdersData || rawOrdersData.length === 0) { alert('请先上传主订单数据并点击「开始分析」后再导入'); return; }
+            jizanAnalyzeBtn.disabled = true;
+            try {
+                const buf = await jizanFile.arrayBuffer();
+                let wb;
+                if (jizanFile.name.toLowerCase().endsWith('.csv')) {
+                    wb = XLSX.read(new TextDecoder('GBK').decode(new Uint8Array(buf)), { type: 'string' });
+                } else {
+                    wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
+                }
+                const parsed = parseJizanWorkbook(wb);
+                applyJizan(parsed);
+            } catch (err) {
+                alert('集赞兑换表解析失败：' + err.message);
+            } finally {
+                jizanAnalyzeBtn.disabled = false;
+            }
+        });
+
+        function parseJizanWorkbook(wb) {
+            const result = { pass: [], repeat: [], fail: [] };
+            const findSheet = (names, exclude) => wb.SheetNames.find(n => names.some(k => n.includes(k)) && !(exclude || []).some(k => n.includes(k)));
+
+            // Sheet1 审核通过（列：手机号、卡面编号、订单号）
+            const snPass = findSheet(['审核通过'], ['重复', '不通过']);
+            if (snPass) {
+                const rows = XLSX.utils.sheet_to_json(wb.Sheets[snPass], { header: 1, defval: '' });
+                for (let i = 1; i < rows.length; i++) {
+                    const r = rows[i] || [];
+                    const phone = String(r[0] || '').trim();
+                    const card = String(r[1] || '').trim();
+                    const orderNo = String(r[2] || '').trim();
+                    if (!phone && !orderNo) continue;
+                    result.pass.push({ phone, card, orderNo });
+                }
+            }
+            // Sheet2 审核通过但是重复填问卷（列：序号、昵称、手机号、卡面编号、订单号）
+            const snRepeat = findSheet(['重复'], ['不通过']);
+            if (snRepeat) {
+                const rows = XLSX.utils.sheet_to_json(wb.Sheets[snRepeat], { header: 1, defval: '' });
+                for (let i = 1; i < rows.length; i++) {
+                    const r = rows[i] || [];
+                    const phone = String(r[2] || '').trim();
+                    const card = String(r[3] || '').trim();
+                    const orderNo = String(r[4] || '').trim();
+                    if (!phone && !orderNo) continue;
+                    result.repeat.push({ phone, card, orderNo });
+                }
+            }
+            // Sheet3 审核不通过 私信确认（列：序号、收件人姓名、收件人手机号、集赞账号🍠、集赞账号🫘、指定卡编号、订单号、核查、备注）
+            const snFail = findSheet(['不通过']);
+            if (snFail) {
+                const rows = XLSX.utils.sheet_to_json(wb.Sheets[snFail], { header: 1, defval: '' });
+                for (let i = 1; i < rows.length; i++) {
+                    const r = rows[i] || [];
+                    const phone = String(r[2] || '').trim();
+                    const card = String(r[5] || '').trim();
+                    const orderNo = String(r[6] || '').trim();
+                    if (!phone && !orderNo) continue;
+                    result.fail.push({ phone, card, orderNo });
+                }
+            }
+            return result;
+        }
+
+        function applyJizan(parsed) {
+            const summary = {
+                pass: { total: 0, ok: 0, fail: [] },
+                repeat: { total: 0, ok: 0, fail: [] },
+                fail: { total: 0, ok: 0, fail: [] }
+            };
+            jizanExportData = [];
+
+            const processList = (list, key, giftValueFn) => {
+                list.forEach(item => {
+                    const u = findUserByPhoneOrder(item.phone, item.orderNo);
+                    summary[key].total++;
+                    const giftValue = giftValueFn(item);
+                    if (u) {
+                        summary[key].ok++;
+                        u.xuanchuanGift = giftValue;
+                        jizanExportData.push({ sheet: key, phone: item.phone, orderNo: item.orderNo, card: item.card || '', matched: true, wechat: u.wechat });
+                    } else {
+                        summary[key].fail.push({ phone: item.phone, orderNo: item.orderNo, card: item.card || '' });
+                        jizanExportData.push({ sheet: key, phone: item.phone, orderNo: item.orderNo, card: item.card || '', matched: false, wechat: '' });
+                    }
+                });
+            };
+            processList(parsed.pass, 'pass', item => item.card);
+            processList(parsed.repeat, 'repeat', item => item.card + '？待核实');
+            processList(parsed.fail, 'fail', () => '异常，请联系客服');
+
+            renderJizanSummary(summary);
+            document.getElementById('jizanResultSection').classList.remove('hidden');
+            document.getElementById('jizanResultSection').scrollIntoView({ behavior: 'smooth' });
+            filteredData = [...userData];
+            renderTable(1);
+        }
+
+        function renderJizanSummary(summary) {
+            const sheetNames = { pass: '审核通过', repeat: '审核通过但是重复填问卷', fail: '审核不通过' };
+            const sheetGift = { pass: '填入卡面编号', repeat: '卡面编号+？待核实', fail: '异常，请联系客服' };
+            document.getElementById('jizanSummary').innerHTML = `
+                <table>
+                    <thead><tr><th>Sheet</th><th>总条数</th><th>匹配成功</th><th>匹配失败</th><th>宣传集赞礼状态</th></tr></thead>
+                    <tbody>
+                        <tr><td>${sheetNames.pass}</td><td>${summary.pass.total}</td><td style="color:#059669;">${summary.pass.ok}</td><td style="color:#ef4444;">${summary.pass.fail.length}</td><td>${sheetGift.pass}</td></tr>
+                        <tr><td>${sheetNames.repeat}</td><td>${summary.repeat.total}</td><td style="color:#059669;">${summary.repeat.ok}</td><td style="color:#ef4444;">${summary.repeat.fail.length}</td><td>${sheetGift.repeat}</td></tr>
+                        <tr><td>${sheetNames.fail}</td><td>${summary.fail.total}</td><td style="color:#059669;">${summary.fail.ok}</td><td style="color:#ef4444;">${summary.fail.fail.length}</td><td>${sheetGift.fail}</td></tr>
+                    </tbody>
+                </table>`;
+
+            const failRows = [];
+            ['pass', 'repeat', 'fail'].forEach(k => {
+                summary[k].fail.forEach(f => failRows.push({ sheet: sheetNames[k], key: f.phone || f.orderNo, card: f.card || '' }));
+            });
+            const tbody = document.getElementById('jizanFailBody');
+            tbody.innerHTML = failRows.length > 0
+                ? failRows.map(f => `<tr><td>${f.sheet}</td><td>${f.key}</td><td>${f.card}</td><td>未匹配到用户</td></tr>`).join('')
+                : '<tr><td colspan="4" style="text-align:center;color:#999;">无匹配失败</td></tr>';
+
+            let msg = `集赞导入完成：\n审核通过 Sheet：匹配成功 ${summary.pass.ok} / 共 ${summary.pass.total}\n重复填问卷 Sheet：匹配成功 ${summary.repeat.ok} / 共 ${summary.repeat.total}\n审核不通过 Sheet：匹配成功 ${summary.fail.ok} / 共 ${summary.fail.total}`;
+            if (failRows.length > 0) {
+                msg += `\n\n匹配失败 ${failRows.length} 条：\n` + failRows.slice(0, 30).map(f => `${f.sheet}：${f.key}`).join('\n');
+                if (failRows.length > 30) msg += `\n...等共 ${failRows.length} 条`;
+            }
+            alert(msg);
+        }
+
+        function exportJizanResult() {
+            if (!jizanExportData) { alert('请先导入集赞兑换表'); return; }
+            const wb = XLSX.utils.book_new();
+            const h1 = ['下单账号', '手机号', '宣传集赞礼'];
+            const d1 = userData.map(u => [u.wechat || '', u.phone || '', u.xuanchuanGift || '无']);
+            const ws1 = XLSX.utils.aoa_to_sheet([h1, ...d1]);
+            ws1['!cols'] = [{ wch: 24 }, { wch: 16 }, { wch: 20 }];
+            XLSX.utils.book_append_sheet(wb, ws1, '宣传集赞礼全量');
+            const h2 = ['来源Sheet', '手机号', '订单号', '卡面编号', '匹配状态', '匹配用户'];
+            const d2 = jizanExportData.map(e => [e.sheet, e.phone, e.orderNo, e.card, e.matched ? '成功' : '失败', e.wechat]);
+            const ws2 = XLSX.utils.aoa_to_sheet([h2, ...d2]);
+            ws2['!cols'] = [{ wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 12 }, { wch: 10 }, { wch: 24 }];
+            XLSX.utils.book_append_sheet(wb, ws2, '导入结果汇总');
+            XLSX.writeFile(wb, getTimestampFilename('集赞导入结果'));
+        }
+
+        // ---------- 用户详情面板 ----------
+        function renderUserDetail(user) {
+            const suikaInfos = suikaAuditMap[user.wechat] || [];
+            const suikaHtml = suikaInfos.length > 0
+                ? suikaInfos.map(s => {
+                    const pass = s.audit.pass;
+                    const detail = s.requests.map(r => r.audit.type + (r.audit.reasons.length ? '（' + r.audit.reasons.join('；') + '）' : '')).join('；');
+                    return `<div style="font-size:12px;line-height:1.7;${pass ? 'color:#059669;' : 'color:#ef4444;'}">【${s.code}】${pass ? '通过' : '不通过'}：${detail}</div>`;
+                }).join('')
+                : '<div style="color:#999;font-size:12px;">未导入碎卡兑换表或无该用户记录</div>';
+
+            const giftHtml = user.xuanchuanGift && user.xuanchuanGift !== '无'
+                ? `<span style="color:#059669;font-weight:bold;">${user.xuanchuanGift}</span>`
+                : '<span style="color:#999;">无</span>';
+
+            document.getElementById('userDetailPanel').innerHTML = `
+                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                    <h3 style="margin:0;color:#667eea;">👤 用户详情</h3>
+                    <span style="font-size:12px;color:#999;">搜索命中单个用户</span>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-top:12px;">
+                    <div><div style="font-size:11px;color:#999;">下单账号</div><div style="font-weight:bold;">${user.wechat || '-'}</div></div>
+                    <div><div style="font-size:11px;color:#999;">手机号</div><div style="font-weight:bold;">${user.phone || '-'}</div></div>
+                    <div><div style="font-size:11px;color:#999;">订单号</div><div style="font-weight:bold;font-size:12px;">${user.orderNos || '-'}</div></div>
+                    <div><div style="font-size:11px;color:#999;">总抽数</div><div style="font-weight:bold;color:#667eea;">${user.totalDraws || 0}</div></div>
+                    <div><div style="font-size:11px;color:#999;">宣传集赞礼</div><div>${giftHtml}</div></div>
+                </div>
+                <div style="margin-top:12px;">
+                    <div style="font-size:11px;color:#999;margin-bottom:4px;">卡片明细（R1,R2,…,SR1,…排序）</div>
+                    <div style="font-size:13px;line-height:1.7;word-break:break-all;">${sortCards(user.items || '') || '<span style="color:#999;">无</span>'}</div>
+                </div>
+                <div style="margin-top:12px;">
+                    <div style="font-size:11px;color:#999;margin-bottom:4px;">碎卡兑换审核状态</div>
+                    ${suikaHtml}
+                </div>
+            `;
+        }
     </script>
 </body>
 </html>
