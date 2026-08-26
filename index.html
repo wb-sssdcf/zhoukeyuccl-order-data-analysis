@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>抽抽乐订单数据分析（待优化 2026.8.22 19：12更新）</title>
+    <title>抽抽乐订单数据分析（待优化 2026.8.26 22：30更新）</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px; }
+        body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: linear-gradient(160deg, #20517d 0%, #4f84b8 32%, #ffffff 58%, #e7c26d 100%); background-attachment: fixed; min-height: 100vh; padding: 20px; }
         .container { max-width: 1400px; margin: 0 auto; }
         
         .header { text-align: center; color: white; margin-bottom: 30px; }
@@ -17,15 +17,15 @@
         
         .upload-section { background: white; border-radius: 16px; padding: 30px; margin-bottom: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.1); text-align: center; }
         .upload-box { border: 2px dashed #ddd; border-radius: 12px; padding: 40px; transition: all 0.3s; cursor: pointer; }
-        .upload-box:hover { border-color: #667eea; background: #f8f9ff; }
-        .upload-box.active { border-color: #667eea; background: #eef2ff; }
-        .upload-box div:first-child { font-size: 48px; color: #667eea; margin-bottom: 15px; }
+        .upload-box:hover { border-color: #20517d; background: #eef4fa; }
+        .upload-box.active { border-color: #20517d; background: #eef2ff; }
+        .upload-box div:first-child { font-size: 48px; color: #20517d; margin-bottom: 15px; }
         .upload-box h3 { font-size: 18px; color: #333; margin-bottom: 8px; }
         .upload-box p { font-size: 14px; color: #999; }
         #fileInput { display: none; }
         
         .btn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #20517d 0%, #4f84b8 100%);
             color: white; border: none; padding: 12px 30px; border-radius: 8px;
             font-size: 16px; cursor: pointer; transition: transform 0.2s; margin-top: 20px;
         }
@@ -35,7 +35,7 @@
         
         .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px; }
         .stat-card { background: white; border-radius: 12px; padding: 20px; text-align: center; box-shadow: 0 5px 20px rgba(0,0,0,0.08); }
-        .stat-card .value { font-size: 28px; font-weight: bold; color: #667eea; margin-bottom: 5px; }
+        .stat-card .value { font-size: 28px; font-weight: bold; color: #20517d; margin-bottom: 5px; }
         .stat-card .label { font-size: 14px; color: #999; }
         
         .charts-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-bottom: 20px; }
@@ -51,8 +51,8 @@
         .table-wrapper { overflow-x: auto; }
         table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
         th, td { padding: 6px 8px; text-align: left; border-bottom: 1px solid #eee; overflow: hidden; text-overflow: ellipsis; }
-        th { background: #f8f9ff; color: #666; font-weight: 600; position: sticky; top: 0; z-index: 10; padding: 6px 8px; }
-        tr:hover { background: #f8f9ff; }
+        th { background: #eef4fa; color: #4a5a6a; font-weight: 600; position: sticky; top: 0; z-index: 10; padding: 6px 8px; }
+        tr:hover { background: #f2f7fc; }
         /* 用户数据表列宽 */
         #userTable col.col-account { width: 90px; }
         #userTable col.col-phone { width: 90px; }
@@ -80,27 +80,37 @@
         .pagination { display: flex; justify-content: center; align-items: center; gap: 5px; margin-top: 15px; flex-wrap: wrap; }
         .pagination button { padding: 6px 12px; border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer; font-size: 13px; }
         .pagination button:hover { background: #f0f0f0; }
-        .pagination button.active { background: #667eea; color: white; border-color: #667eea; }
+        .pagination button.active { background: #20517d; color: white; border-color: #20517d; }
         .pagination button:disabled { opacity: 0.5; cursor: not-allowed; }
         .pagination span { padding: 0 10px; font-size: 13px; color: #666; }
         
-        .loading { text-align: center; padding: 40px; color: #667eea; }
+        .loading { text-align: center; padding: 40px; color: #20517d; }
         .loading div:first-child { font-size: 36px; animation: spin 1s linear infinite; display: block; margin-bottom: 10px; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         
         .hidden { display: none; }
         
         @media (max-width: 768px) {
+            body { padding: 10px; }
             .stats-grid { grid-template-columns: repeat(2, 1fr); }
             .charts-row { grid-template-columns: 1fr; }
-            .header h1 { font-size: 22px; }
+            .header h1 { font-size: 20px; }
+            .upload-section { padding: 16px; }
+            .upload-box { padding: 20px; }
+            .upload-box div:first-child { font-size: 36px; }
+            .btn { width: 100%; }
+            table { font-size: 11px; }
+            th, td { padding: 4px 6px; }
+            .search-box { width: 100%; }
+            .table-header { flex-direction: column; align-items: stretch; }
+            .chart-container { height: 220px; }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>📊 抽抽乐订单数据分析（待优化2026.8.22 19：12更新）</h1>
+            <h1>📊 抽抽乐订单数据分析（待优化2026.8.26 22：30更新）</h1>
             <p>上传Excel文件，自动生成数据分析报告</p>
         </div>
 
@@ -123,6 +133,19 @@
             </div>
             <input type="file" id="suikaFileInput" accept=".xlsx,.xls,.csv">
             <button class="btn" id="suikaAnalyzeBtn" disabled>开始审核</button>
+            <label style="margin-left:10px;font-size:13px;color:#555;display:inline-flex;align-items:center;gap:4px;cursor:pointer;user-select:none;">
+                <input type="checkbox" id="suikaMergePhoneCb" checked style="accent-color:#20517d;cursor:pointer;"> 审核时按手机号聚合多账号（详情展示保持原样）
+            </label>
+            <label style="margin-left:10px;font-size:13px;color:#555;display:inline-flex;align-items:center;gap:4px;cursor:pointer;user-select:none;">
+                <input type="checkbox" id="suikaMergeMultiCb" checked style="accent-color:#20517d;cursor:pointer;"> 按手机号聚合所有提交合并核算（同一手机号所有提交整体判定）
+            </label>
+            <div class="suika-rules" style="margin-top:14px;padding:10px 14px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:12px;color:#92400e;line-height:1.8;text-align:left;">
+                <b>📋 碎卡兑换规则（「周柯宇 fully unlocked」爱意正值炽夏🍃小卡抽抽乐·非酋机制）</b>
+                <div>每满 36 抽：6 张任意搭配的 r/sr 兑 1 张 sr 卡面</div>
+                <div>每满 72 抽：6 张任意搭配的 r/sr 兑 1 张任意卡面</div>
+                <div>每满 72 抽：1 张 ssr 平换 1 张 ssr（不需 6 张）</div>
+                <div>R 卡按 36 抽/张计（活动方确认口径）；彼此不可叠加，已兑换过的抽数不可再次使用</div>
+            </div>
             <div id="suikaFileList" style="margin-top: 15px; color: #666;"></div>
         </div>
 
@@ -131,30 +154,51 @@
                 <div class="stat-card"><div class="value" id="suikaTotalSubmits">-</div><div class="label">总提交数</div></div>
                 <div class="stat-card"><div class="value" id="suikaTotalRequests">-</div><div class="label">总兑换请求</div></div>
                 <div class="stat-card"><div class="value" id="suikaPassCount" style="color:#059669;">-</div><div class="label">通过提交数</div></div>
-                <div class="stat-card"><div class="value" id="suikaFailCount" style="color:#ef4444;">-</div><div class="label">不通过提交数</div></div>
                 <div class="stat-card"><div class="value" id="suikaNotFoundCount" style="color:#ea580c;">-</div><div class="label">未找到用户提交数</div></div>
-                <div class="stat-card"><div class="value" id="suikaReviewCount" style="color:#ca8a04;">-</div><div class="label">需人工复核提交数</div></div>
+                <div class="stat-card"><div class="value" id="suikaHandleCount" style="color:#ca8a04;">-</div><div class="label">需人工处理提交数</div></div>
             </div>
             <div class="table-section">
                 <div class="table-header">
                     <h3>🔍 碎卡兑换审核结果</h3>
                     <div>
-                        <span style="font-size:12px;color:#999;margin-right:10px;">绿色=通过，红色=不通过，橙色=未找到用户，黄色=需人工复核</span>
+                        <span style="font-size:12px;color:#999;margin-right:10px;">绿色=通过，橙色=未找到用户，黄色=需人工处理（不通过与需人工复核已合并）</span>
                         <button class="btn btn-sm" onclick="exportSuikaResult()">📥 导出审核结果Excel</button>
                         <button class="btn btn-sm" onclick="exportSuikaNotFound()">📥 导出未匹配用户清单</button>
                     </div>
                 </div>
-                <div class="table-wrapper" style="max-height:600px;">
-                    <table id="suikaResultTable">
-                        <thead>
-                            <tr>
-                                <th>提交编号</th><th>昵称</th><th>手机号</th><th>总抽数</th>
-                                <th>兑换类型</th><th>换入卡面</th><th>换出卡明细</th>
-                                <th>审核结果</th><th>原因明细</th>
-                            </tr>
-                        </thead>
-                        <tbody id="suikaResultBody"></tbody>
-                    </table>
+                <div class="table-section">
+                    <div class="table-header" style="border:none;padding:6px 0;">
+                        <h3 style="font-size:14px;margin:0;">📋 提交级审核汇总（整体判定口径）</h3>
+                    </div>
+                    <div class="table-wrapper" style="max-height:420px;">
+                        <table id="suikaSubmitSummaryTable">
+                            <thead>
+                                <tr>
+                                    <th>提交编号</th><th>昵称</th><th>手机号</th><th>请求数</th>
+                                    <th>换入汇总</th><th>换出汇总</th>
+                                    <th>审核结果</th><th>原因汇总</th>
+                                </tr>
+                            </thead>
+                            <tbody id="suikaSubmitSummaryBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="table-section">
+                    <div class="table-header" style="border:none;padding:6px 0;">
+                        <h3 style="font-size:14px;margin:0;">📄 兑换请求明细（逐条核对，供查看）</h3>
+                    </div>
+                    <div class="table-wrapper" style="max-height:600px;">
+                        <table id="suikaResultTable">
+                            <thead>
+                                <tr>
+                                    <th>提交编号</th><th>请求</th><th>昵称</th><th>手机号</th><th>总抽数</th>
+                                    <th>兑换类型</th><th>换入卡面</th><th>换出卡明细</th>
+                                    <th>审核结果</th><th>原因明细</th>
+                                </tr>
+                            </thead>
+                            <tbody id="suikaResultBody"></tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -174,7 +218,11 @@
             <div class="table-section">
                 <div class="table-header">
                     <h3>📋 集赞兑换导入结果</h3>
-                    <button class="btn btn-sm" onclick="exportJizanResult()">📥 导出集赞导入结果Excel</button>
+                    <div>
+                        <button class="btn btn-sm" onclick="exportJizanResult()">📥 导出集赞导入结果Excel</button>
+                        <button class="btn btn-sm" onclick="exportLaibaoOnly()">📥 导出来豹接龙查询表</button>
+                        <button class="btn btn-sm" onclick="exportJizanCoreSheet()">📥 导出集赞核心信息查询表</button>
+                    </div>
                 </div>
                 <div id="jizanSummary"></div>
             </div>
@@ -283,7 +331,7 @@
             </div>
 
             <div class="table-section">
-                <div id="userDetailPanel" class="hidden" style="padding: 16px 20px; margin-bottom: 14px; border-radius: 12px; background: linear-gradient(135deg, #f0f3ff, #fdf2ff); border: 1px solid #e0e7ff;"></div>
+                <div id="userDetailPanel" class="hidden" style="padding: 16px 20px; margin-bottom: 14px; border-radius: 12px; background: linear-gradient(135deg, #f0f7ff, #fff8e8); border: 1px solid #dce8f5;"></div>
                 <div class="table-header">
                     <h3>📋 用户数据表格</h3>
                     <div>
@@ -426,7 +474,7 @@
             }
             fileList.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:8px;">
                 ${fileDataList.map((f, i) => `<span style="background:#f0f0f0;padding:4px 12px;border-radius:12px;font-size:13px;display:flex;align-items:center;gap:4px;">📄 ${f.name} <button onclick="removeFile(${i})" style="background:none;border:none;cursor:pointer;color:#999;font-size:12px;">&times;</button></span>`).join('')}
-                <span style="color:#667eea;">共 ${fileDataList.length} 个文件</span>
+                <span style="color:#20517d;">共 ${fileDataList.length} 个文件</span>
             </div>`;
         }
         
@@ -1489,7 +1537,7 @@
                 grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
                 xAxis: { type: 'category', data: top10Cards.map(c => c.cardName), axisLabel: { rotate: 45, fontSize: 11 } },
                 yAxis: { type: 'value' },
-                series: [{ type: 'bar', data: top10Cards.map(c => c.count), itemStyle: { borderRadius: [4, 4, 0, 0], color: '#667eea' } }]
+                series: [{ type: 'bar', data: top10Cards.map(c => c.count), itemStyle: { borderRadius: [4, 4, 0, 0], color: '#20517d' } }]
             });
 
             charts.activityBarChart = echarts.init(document.getElementById('activityBarChart'));
@@ -1500,9 +1548,9 @@
                 xAxis: { type: 'category', data: activityStats.map(a => a.period), axisLabel: { fontSize: 11 } },
                 yAxis: { type: 'value' },
                 series: [
-                    { name: '订单数', type: 'bar', data: activityStats.map(a => a.orders), itemStyle: { color: '#667eea' } },
-                    { name: '参与用户数', type: 'bar', data: activityStats.map(a => a.userCount), itemStyle: { color: '#764ba2' } },
-                    { name: '总抽数', type: 'bar', data: activityStats.map(a => a.draws), itemStyle: { color: '#f093fb' } }
+                    { name: '订单数', type: 'bar', data: activityStats.map(a => a.orders), itemStyle: { color: '#20517d' } },
+                    { name: '参与用户数', type: 'bar', data: activityStats.map(a => a.userCount), itemStyle: { color: '#e7c26d' } },
+                    { name: '总抽数', type: 'bar', data: activityStats.map(a => a.draws), itemStyle: { color: '#4f84b8' } }
                 ]
             });
 
@@ -1512,7 +1560,7 @@
                 grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
                 xAxis: { type: 'category', data: milestoneStats.map(m => `满${m.milestone}抽`), axisLabel: { rotate: 45, fontSize: 11 } },
                 yAxis: { type: 'value' },
-                series: [{ type: 'bar', data: milestoneStats.map(m => m.count), itemStyle: { borderRadius: [4, 4, 0, 0], color: '#667eea' } }]
+                series: [{ type: 'bar', data: milestoneStats.map(m => m.count), itemStyle: { borderRadius: [4, 4, 0, 0], color: '#20517d' } }]
             });
 
             window.addEventListener('resize', () => { Object.values(charts).forEach(c => c.resize()); });
@@ -1650,12 +1698,13 @@
             const pageData = filteredData.slice(start, end);
 
             const tbody = document.getElementById('userTableBody');
-            tbody.innerHTML = pageData.length > 0 ? pageData.map(user => {
+            window.__rowUsers = pageData; // 供行内订单明细弹窗按钮使用
+            tbody.innerHTML = pageData.length > 0 ? pageData.map((user, __ri) => {
                 const isDuanheBadge = user.isDuanhe === '是' 
                     ? '<span style="background:#fef3c7;color:#d97706;padding:1px 6px;border-radius:4px;font-size:11px;">端盒</span>' 
                     : '<span style="color:#999;font-size:11px;">-</span>';
                 const milestoneBadge = user.milestoneRewards 
-                    ? `<span style="color:#667eea;font-size:11px;word-break:break-all;white-space:normal;line-height:1.4;">${user.milestoneRewards}</span>` 
+                    ? `<span style="color:#20517d;font-size:11px;word-break:break-all;white-space:normal;line-height:1.4;">${user.milestoneRewards}</span>` 
                     : '<span style="color:#999;font-size:11px;">-</span>';
                 
                 // 限时小卡详细显示
@@ -1728,7 +1777,9 @@
                     <td>${user.wechat || ''}</td>
                     <td>${user.phone || ''}</td>
                     <td>${user.orderCount || 0}</td>
-                    <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${user.orderNos || ''}">${user.orderNos || ''}</td>
+                    <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${user.orderNos || ''}">
+                        <span onclick="window.__rowUsers && showOrderModal(window.__rowUsers[${__ri}])" style="cursor:pointer;color:#20517d;text-decoration:underline;" title="点击查看订单明细">${user.orderNos || ''}</span>
+                    </td>
                     <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${user.items || ''}">${user.items || ''}</td>
                     <td>${user.totalDraws || 0}</td>
                     <td>${isDuanheBadge}</td>
@@ -1784,10 +1835,16 @@
             } else {
                 filteredData = [...userData];
             }
-            // 详情面板：命中单个用户时展示详情卡片
+            // 详情面板/搜索弹窗：命中单个用户时展示详情卡片；命中多个时提示数量与操作指引
             const detailPanel = document.getElementById('userDetailPanel');
             if (keyword && filteredData.length === 1) {
                 renderUserDetail(filteredData[0]);
+                detailPanel.classList.remove('hidden');
+            } else if (keyword && filteredData.length > 1) {
+                detailPanel.innerHTML = `<div style="padding:14px;background:#eef2ff;border-radius:10px;font-size:13px;color:#4f46e5;line-height:1.7;">
+                    🔍 搜索命中 <b>${filteredData.length}</b> 个用户（列表已按关键词过滤）
+                    <div style="font-size:12px;color:#6b7280;margin-top:4px;">点击表格中的蓝色订单号可查看该用户订单明细</div>
+                </div>`;
                 detailPanel.classList.remove('hidden');
             } else {
                 detailPanel.classList.add('hidden');
@@ -1983,6 +2040,46 @@
             return XLSX.utils.aoa_to_sheet([headers, ...data]);
         }
 
+        // 独立导出来豹接龙查询表（与集赞导入结果整合导出的 sheet 同源，单独一个文件）
+        function exportLaibaoOnly() {
+            if (!userData || userData.length === 0) { alert('请先上传主订单数据并点击「开始分析」后再导出来豹接龙查询表'); return; }
+            const wb = XLSX.utils.book_new();
+            const ws = exportLaibaoSheet();
+            ws['!cols'] = [{ wch: 22 }, { wch: 24 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 14 }];
+            XLSX.utils.book_append_sheet(wb, ws, '来豹接龙查询表');
+            XLSX.writeFile(wb, getTimestampFilename('来豹接龙查询表'));
+        }
+
+        // 导出集赞核心信息查询表（仅集赞有结果的用户，供查询兑付用）
+        function exportJizanCoreSheet() {
+            if (!userData || userData.length === 0) { alert('请先上传主订单数据并点击「开始分析」后再导出集赞核心信息查询表'); return; }
+            const headers = ['下单账号', '手机号', '宣传集赞礼', '状态', '补邮情况'];
+            const data = [];
+            userData.forEach(u => {
+                const raw = String(u.xuanchuanGift || '').trim();
+                if (!raw || raw === '无') return; // 仅集赞有结果的用户
+                let card = raw;
+                let status = '正常';
+                if (raw === '异常，请联系客服') {
+                    status = '异常';
+                } else if (/[？?]待核实/.test(raw)) {
+                    status = '待核实';
+                    card = raw.replace(/([？?]待核实)\s*$/, '');
+                }
+                let buyouStr = '无需补邮';
+                const needBuyou = u.totalDraws < 10;
+                if (needBuyou) {
+                    buyouStr = u.buyouCount > 0 ? '已补邮*' + u.buyouCount : '未补邮';
+                }
+                data.push([u.wechat || '', u.phone || '', card, status, buyouStr]);
+            });
+            const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
+            ws['!cols'] = [{ wch: 24 }, { wch: 16 }, { wch: 22 }, { wch: 10 }, { wch: 14 }];
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, '集赞核心信息');
+            XLSX.writeFile(wb, getTimestampFilename('集赞核心信息查询表'));
+        }
+
         function exportExcel(type) {
             const workbook = XLSX.utils.book_new();
             
@@ -2029,6 +2126,8 @@
         let suikaAuditMap = {};            // 用户维度碎卡审核索引 {wechat: [提交]}
         let userCardCountsMap = {};        // 用户卡面计数 {wechat: {卡面: 数量}}
         let jizanExportData = null;        // 集赞导入导出数据
+        let mergedUsersCache = null;       // 按手机号聚合后的用户缓存（审核时使用，详情展示保持原样）
+        let suikaRawDataCache = null;      // 碎卡导入原始数据缓存（用于导出来豹接龙查询表）
 
         // ---------- 卡片排序工具 ----------
         const CARD_RARITY_ORDER = { 'N': 0, 'R': 1, 'SR': 2, 'SSR': 3, 'SSSR': 4 };
@@ -2096,20 +2195,70 @@
             return s;
         }
 
+        // 按手机号聚合多个下单账号（userData 按 wechat 分组，同手机号可能对应多个账号）
+        // 仅用于审核匹配口径；详情展示/导出仍使用原始 user 数据，保持原样
+        function mergeUsersByPhone(users) {
+            const base = users[0];
+            const totalDraws = users.reduce((s, u) => s + (u.totalDraws || 0), 0);
+            const mergedCounts = {};
+            users.forEach(u => {
+                const c = userCardCountsMap[u.wechat];
+                if (c && c.counts) Object.keys(c.counts).forEach(k => { mergedCounts[k] = (mergedCounts[k] || 0) + c.counts[k]; });
+            });
+            const orderDraws = [];
+            const buyouOrders = [];
+            users.forEach(u => {
+                (u.orderDraws || []).forEach(o => orderDraws.push(Object.assign({}, o, { _owner: u.wechat })));
+                (u.buyouOrders || []).forEach(b => buyouOrders.push(Object.assign({}, b, { _owner: u.wechat })));
+            });
+            const itemsParts = users.map(u => u.items || '').filter(Boolean);
+            return Object.assign({}, base, {
+                totalDraws: totalDraws,
+                mergedFrom: users.map(u => u.wechat),
+                orderDraws: orderDraws,
+                buyouOrders: buyouOrders,
+                items: itemsParts.join('；'),
+                _mergedCounts: mergedCounts,
+                _isMerged: true
+            });
+        }
+
+        // 获取同手机号全部账号的聚合卡面计数（审核核对用）；未命中返回 null
+        function getMergedUserCards(phone) {
+            const cleanPhone = normalizePhone(phone);
+            if (!cleanPhone || cleanPhone.length < 6) return null;
+            const users = userData.filter(x => normalizePhone(x.phone) === cleanPhone);
+            if (users.length === 0) return null;
+            const cardCounts = {};
+            users.forEach(u => {
+                const c = userCardCountsMap[u.wechat];
+                if (c && c.counts) Object.keys(c.counts).forEach(k => { cardCounts[k] = (cardCounts[k] || 0) + c.counts[k]; });
+            });
+            return { users: users, cardCounts: cardCounts, totalDraws: users.reduce((s, u) => s + (u.totalDraws || 0), 0) };
+        }
+
         // 多级匹配链：1) 归一化手机号 → 2) 订单号 → 3) 昵称(下单账号) → 4) 收件人姓名
+        // opts.mergeByPhone=true 时，手机号命中多个账号会返回聚合用户（仅审核使用）
         // 返回 { user, matchedKey, triedKeys }
-        function findUserByPhoneOrderDetail(phone, orderNo, nickname, name) {
+        function findUserByPhoneOrderDetail(phone, orderNo, nickname, name, opts) {
             const triedKeys = [];
+            opts = opts || {};
             const cleanPhone = normalizePhone(phone);
             if (cleanPhone && cleanPhone.length >= 6) {
                 triedKeys.push('手机号');
-                const u = userData.find(x => normalizePhone(x.phone) === cleanPhone);
-                if (u) return { user: u, matchedKey: '手机号', triedKeys };
-                const u2 = userData.find(x => {
-                    const p = normalizePhone(x.phone);
-                    return p && p.length >= 6 && (p.includes(cleanPhone) || cleanPhone.includes(p));
-                });
-                if (u2) return { user: u2, matchedKey: '手机号(模糊)', triedKeys };
+                let matches = userData.filter(x => normalizePhone(x.phone) === cleanPhone);
+                if (matches.length === 0) {
+                    matches = userData.filter(x => {
+                        const p = normalizePhone(x.phone);
+                        return p && p.length >= 6 && (p.includes(cleanPhone) || cleanPhone.includes(p));
+                    });
+                }
+                if (matches.length > 0) {
+                    if (opts.mergeByPhone && matches.length > 1) {
+                        return { user: mergeUsersByPhone(matches), matchedKey: '手机号(聚合' + matches.length + '账号)', triedKeys };
+                    }
+                    return { user: matches[0], matchedKey: '手机号', triedKeys };
+                }
             }
             const cleanOrder = String(orderNo || '').trim();
             if (cleanOrder) {
@@ -2184,12 +2333,52 @@
                 }
                 suikaSubmissions = groupSuikaRowsFromWb(wb);
                 userCardCountsMap = buildUserCardCounts(rawOrdersData);
+                const mergeOn = document.getElementById('suikaMergePhoneCb') ? document.getElementById('suikaMergePhoneCb').checked : false;
+                const multiOn = document.getElementById('suikaMergeMultiCb') ? document.getElementById('suikaMergeMultiCb').checked : true;
                 suikaSubmissions.forEach(s => {
-                    const matched = findUserByPhoneOrderDetail(s.phone, s.orderNo, s.nickname, s.name);
+                    const matched = findUserByPhoneOrderDetail(s.phone, s.orderNo, s.nickname, s.name, mergeOn ? { mergeByPhone: true } : {});
                     s.user = matched.user;
                     s.userMatch = matched;
-                    s.audit = auditSubmission(s);
                 });
+                const toTime = v => {
+                    const t = Date.parse(String(v || '').replace(/[./]/g, '-').replace(/(\d{4})-(\d{1,2})-(\d{1,2})/, '$1-$2-$3'));
+                    return isNaN(t) ? 0 : t;
+                };
+                if (multiOn) {
+                    // 按手机号聚合所有提交，合并为一个整体核算（同一手机号所有提交共同判定）
+                    const groupByPhone = {};
+                    suikaSubmissions.forEach(s => {
+                        const key = normalizePhone(s.phone) || '__nophone__';
+                        if (!groupByPhone[key]) groupByPhone[key] = [];
+                        groupByPhone[key].push(s);
+                    });
+                    Object.keys(groupByPhone).forEach(key => {
+                        const list = groupByPhone[key].sort((a, b) => toTime(a.submitTime) - toTime(b.submitTime));
+                        const firstMatched = list.find(s => s.user);
+                        const user = firstMatched ? firstMatched.user : null;
+                        const triedKeys = (firstMatched && firstMatched.userMatch && firstMatched.userMatch.triedKeys) ? firstMatched.userMatch.triedKeys : [];
+                        auditSubmissionsGrouped(list, user, triedKeys);
+                    });
+                } else {
+                    // 原有口径：跨提交抽数累计——同用户按提交时间先后审核，
+                    // 通过提交消耗的抽数累计扣减，后续提交用剩余抽数判定资格（已兑换抽数不可叠加使用）
+                    const groupByUser = {};
+                    suikaSubmissions.forEach(s => {
+                        const key = s.user ? s.user.wechat : '__nouser__';
+                        if (!groupByUser[key]) groupByUser[key] = [];
+                        groupByUser[key].push(s);
+                    });
+                    Object.keys(groupByUser).forEach(key => {
+                        groupByUser[key].sort((a, b) => toTime(a.submitTime) - toTime(b.submitTime));
+                        let used = 0;
+                        groupByUser[key].forEach(s => {
+                            if (!s.user) { s.audit = auditSubmission(s); return; }
+                            const remaining = Math.max(0, s.user.totalDraws - used);
+                            s.audit = auditSubmission(s, remaining);
+                            if (s.audit.pass) used += (s.audit.usedDraws || 0);
+                        });
+                    });
+                }
                 suikaAuditMap = {};
                 suikaSubmissions.forEach(s => {
                     if (s.user) {
@@ -2200,9 +2389,9 @@
                 renderSuikaResults();
                 document.getElementById('suikaResultSection').classList.remove('hidden');
                 document.getElementById('suikaResultSection').scrollIntoView({ behavior: 'smooth' });
-                const statusCount = { '通过': 0, '不通过': 0, '未找到用户': 0, '需人工复核': 0 };
+                const statusCount = { '通过': 0, '未找到用户': 0, '需人工处理': 0 };
                 suikaSubmissions.forEach(s => { statusCount[s.audit.status] = (statusCount[s.audit.status] || 0) + 1; });
-                alert(`碎卡兑换审核完成：共 ${suikaSubmissions.length} 个提交\n通过 ${statusCount['通过']} 个，不通过 ${statusCount['不通过']} 个\n未找到用户 ${statusCount['未找到用户']} 个，需人工复核 ${statusCount['需人工复核']} 个`);
+                alert(`碎卡兑换审核完成：共 ${suikaSubmissions.length} 个提交\n通过 ${statusCount['通过']} 个，未找到用户 ${statusCount['未找到用户']} 个\n需人工处理 ${statusCount['需人工处理']} 个`);
             } catch (err) {
                 alert('碎卡兑换表解析失败：' + err.message);
             } finally {
@@ -2234,60 +2423,126 @@
             return cards;
         }
 
-        // 解析换出卡单元格：支持多卡面（'R23、R32、R22…'）、显式配对（'5张r34'/'r34五张'）、数字序列（'1，1，1，4'）、'各一张'等
+        // 解析换出卡单元格：支持多卡面（'R23、R32、R22…'）、显式配对（'5张r34'/'r34五张'）、
+        // 数字序列（'1，1，1，4'）、'各一张'、括号数量备注（'R2（3张）'）、内嵌数量（'R2*3'/'R2x3'/'R2×3'/'R2 3张'）等
+        // 分隔符兼容顿号/逗号/分号/斜杠/竖线/·/&/+/换行/全半角
         // 返回 { review: boolean, cards: [{card, qty}] }；review=true 表示格式复杂需人工复核
         function parseOutCardCell(cellText, qtyText) {
             const cell = String(cellText || '').trim();
             const qty = String(qtyText || '').trim();
-            if (!cell) return { review: false, cards: [] };
-            if (cell.includes('端盒') || qty.includes('端盒') || cell.includes('（') || cell.includes('）') || cell.includes('(') || cell.includes(')')) {
+            if (!cell && !qty) return { review: false, cards: [] };
+            if (!cell) {
+                // 换出卡面列为空，但张数列含卡面明细（如 '1 R1x3, R24x3'）时用张数列解析；纯数量视为空白
+                if (/^(SSSR|SSR|SR|R|N)\s*\d/i.test(qty)) { return parseOutCardCell(qty, ''); }
+                return { review: false, cards: [] };
+            }
+            if (cell.includes('端盒') || cell.includes('瑞盒') || qty.includes('端盒') || qty.includes('瑞盒')) {
                 return { review: true, cards: [{ card: cell, qty: parseQty(qty) }] };
             }
-            const normAll = normalizeCardId(cell);
-            if (normAll) return { review: false, cards: [{ card: normAll, qty: parseQty(qty) }] };
-            const parts = cell.split(/[、，,；;/\s]+/).map(s => s.trim()).filter(Boolean);
+            let cellWork = cell;
+            // 括号数量备注：'R2（3张）'/'R2(2)'/'R2（两张）' → 提取数量并移除括号；括号内非纯数量视为复杂格式
+            let bracketQty = null;
+            if (cellWork.includes('（') || cellWork.includes('）') || cellWork.includes('(') || cellWork.includes(')')) {
+                const bm = cellWork.match(/[（(]\s*([一二两三四五六七八九十]|\d+)\s*张?\s*[）)]/);
+                if (bm) {
+                    bracketQty = cnNumToInt(bm[1]);
+                    cellWork = cellWork.replace(/[（(]\s*([一二两三四五六七八九十]|\d+)\s*张?\s*[）)]/, '').trim();
+                } else {
+                    // 括号内不是纯数量：若为整组卡面列表（如 '（R32、R33、R31、R34、R38、R40）'），剥离括号后继续解析
+                    const bracketContent = (cellWork.match(/[（(]([^（）()]*)[）)]/) || [])[1] || '';
+                    if (bracketContent && /^(SSSR|SSR|SR|R|N)\s*\d/i.test(bracketContent)) {
+                        cellWork = cellWork.replace(/[（(][^（）()]*[）)]/, bracketContent).trim();
+                    } else {
+                        return { review: true, cards: [{ card: cell, qty: parseQty(qty) }] };
+                    }
+                }
+            }
+            // 整格单卡面
+            const normAll = normalizeCardId(cellWork);
+            if (normAll) {
+                let q = parseQty(qty);
+                if (bracketQty !== null) q = bracketQty;
+                // 张数列空白/0 时默认 1 张（单卡面平换场景，如 'SSR8←SSR6' 应为 1 张）
+                if (!q || q < 1) q = 1;
+                return { review: false, cards: [{ card: normAll, qty: q }] };
+            }
+            // 整格单卡面+空格数量（'R2 3张'/'R2 三张'）
+            const wholeQty = cellWork.match(/^((?:SSSR|SSR|SR|R|N)\s*\d+)\s+([一二两三四五六七八九十]|\d+)\s*张$/i);
+            if (wholeQty) {
+                const c = normalizeCardId(wholeQty[1]);
+                const v = cnNumToInt(wholeQty[2]);
+                if (c && v !== null) return { review: false, cards: [{ card: c, qty: v }] };
+            }
+            const parts = cellWork.split(/[、，,；;/\s|·&+]+/).map(s => s.trim()).filter(Boolean);
             if (parts.length === 0) return { review: false, cards: [] };
-            const norms = parts.map(p => normalizeCardId(p));
-            if (!norms.some(Boolean)) return { review: true, cards: [{ card: cell, qty: parseQty(qty) }] };
-
+            const result = [];
+            const unmatched = [];
+            // 内嵌数量：'R2*3'/'R2x3'/'R2×3'/'R2 3张'（需带'张'，避免把'R23'误拆）
+            const reCardQty = /^((?:SSSR|SSR|SR|R|N)\s*\d+)\s*[x×*]\s*([一二两三四五六七八九十]|\d+)\s*张?$/i;
+            const reCardQty2 = /^((?:SSSR|SSR|SR|R|N)\s*\d+)\s*[（(]?\s*([一二两三四五六七八九十]|\d+)\s*张\s*[）)]?$/i;
+            // 数量前缀：'3张R2'/'三张R2'
+            const reQtyCard = /^([一二两三四五六七八九十]|\d+)\s*张\s*((?:SSSR|SSR|SR|R|N)\s*\d+)$/i;
+            parts.forEach(p => {
+                let m = p.match(reCardQty) || p.match(reCardQty2);
+                if (m) {
+                    const c = normalizeCardId(m[1]);
+                    const v = cnNumToInt(m[2]);
+                    if (c && v !== null) { result.push({ card: c, qty: v }); return; }
+                }
+                m = p.match(reQtyCard);
+                if (m) {
+                    const c = normalizeCardId(m[2]);
+                    const v = cnNumToInt(m[1]);
+                    if (c && v !== null) { result.push({ card: c, qty: v }); return; }
+                }
+                const n = normalizeCardId(p);
+                if (n) { result.push({ card: n, qty: null }); return; }
+                if (/^\d+$/.test(p)) return; // 纯数字视为序号/编号，忽略
+                unmatched.push(p);
+            });
+            if (unmatched.length > 0) {
+                return { review: true, cards: result.length > 0 ? result : [{ card: cell, qty: parseQty(qty) }] };
+            }
+            // qty 列显式配对：'R2 3张'/'3张R2' 出现在 qty 列时按卡面绑定
             const explicit = {};
-            let m;
+            let m2;
             const re1 = /((?:SSSR|SSR|SR|R|N)\s*\d+)\s*([一二两三四五六七八九十]|\d+)\s*张/gi;
-            while ((m = re1.exec(qty)) !== null) {
-                const c = normalizeCardId(m[1]);
-                const v = cnNumToInt(m[2]);
+            while ((m2 = re1.exec(qty)) !== null) {
+                const c = normalizeCardId(m2[1]);
+                const v = cnNumToInt(m2[2]);
                 if (c && v !== null) explicit[c] = v;
             }
             const re2 = /([一二两三四五六七八九十]|\d+)\s*张\s*((?:SSSR|SSR|SR|R|N)\s*\d+)/gi;
-            while ((m = re2.exec(qty)) !== null) {
-                const c = normalizeCardId(m[2]);
-                const v = cnNumToInt(m[1]);
+            while ((m2 = re2.exec(qty)) !== null) {
+                const c = normalizeCardId(m2[2]);
+                const v = cnNumToInt(m2[1]);
                 if (c && v !== null) explicit[c] = v;
             }
-            const result = [];
-            const remaining = [];
-            norms.forEach(n => {
-                if (!n) return;
-                if (explicit[n] !== undefined) result.push({ card: n, qty: explicit[n] });
-                else remaining.push(n);
+            result.forEach(o => {
+                if (o.qty === null && explicit[o.card] !== undefined) o.qty = explicit[o.card];
             });
-            if (remaining.length > 0) {
+            // 剩余未配对数量补齐
+            let review = false;
+            const missing = result.filter(o => o.qty === null);
+            if (missing.length > 0) {
                 const nums = qty.match(/\d+/g) || [];
-                if (nums.length === remaining.length) {
-                    remaining.forEach((n, i) => result.push({ card: n, qty: parseInt(nums[i], 10) }));
-                    return { review: false, cards: result };
+                if (nums.length === missing.length) {
+                    missing.forEach((o, i) => { o.qty = parseInt(nums[i], 10); });
+                } else if (/各一|每张|各一张|一样一/.test(qty) || bracketQty !== null) {
+                    missing.forEach(o => { o.qty = 1; });
+                } else if (nums.length === 1 && parseInt(nums[0], 10) === missing.length) {
+                    missing.forEach(o => { o.qty = 1; });
+                } else {
+                    review = true;
                 }
-                if (/各一|每张|各一张|一样一/.test(qty)) {
-                    remaining.forEach(n => result.push({ card: n, qty: 1 }));
-                    return { review: false, cards: result };
-                }
-                if (nums.length === 1 && parseInt(nums[0], 10) === remaining.length) {
-                    remaining.forEach(n => result.push({ card: n, qty: 1 }));
-                    return { review: false, cards: result };
-                }
-                return { review: true, cards: result.length > 0 ? result : [{ card: cell, qty: parseQty(qty) }] };
             }
-            return { review: false, cards: result };
+            // 单卡面兜底用 qty 列/括号数量
+            if (result.length === 1 && result[0].qty === null) {
+                const q = parseQty(qty);
+                if (q > 0) result[0].qty = q;
+                else if (bracketQty !== null) result[0].qty = bracketQty;
+            }
+            return { review, cards: result };
         }
 
         function getCell(row, i) {
@@ -2299,6 +2554,7 @@
         function groupSuikaRowsFromWb(wb) {
             const ws = wb.Sheets[wb.SheetNames[0]];
             const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+            suikaRawDataCache = rows; // 保存原始数据，供“导出来豹接龙查询表”使用
             let headerRow = -1;
             for (let i = 0; i < Math.min(6, rows.length); i++) {
                 const joined = String((rows[i] || []).join('|'));
@@ -2392,11 +2648,13 @@
                         cur._outTarget = req;
                     }
                 }
-                if (outCard) {
+                if (outCard || outQtyRaw) {
                     const parsed = parseOutCardCell(outCard, outQtyRaw);
                     const target = cur._outTarget || (cur.requests.length > 0 ? cur.requests[cur.requests.length - 1] : null);
                     if (parsed.review && target) target.review = true;
                     if (target) {
+                        target.outRaw = outCard;
+                        target.outQtyRaw = outQtyRaw;
                         target.outCards = target.outCards.concat(parsed.cards);
                     } else {
                         cur.pendingOut = cur.pendingOut.concat(parsed.cards);
@@ -2424,13 +2682,13 @@
                 const desc = row['订单描述'] !== undefined && row['订单描述'] !== null ? String(row['订单描述']) : '';
                 const gift = row['赠品'] !== undefined && row['赠品'] !== null ? String(row['赠品']) : '';
                 if (desc) {
-                    desc.split(';').forEach(item => {
+                    desc.split(/[;；]/).forEach(item => {
                         item = item.trim();
                         if (!item || !item.includes('[购买数量:')) return;
                         const namePart = item.split('[购买数量:')[0].trim();
                         const qty = parseInt(item.split('[购买数量:')[1].replace(']', '').trim()) || 1;
                         if (namePart.includes('盲盒商品')) return;
-                        if (namePart.includes('端盒') || namePart.includes('一键端盒')) return;
+                        if (namePart.includes('端盒') || namePart.includes('一键端盒') || namePart.includes('瑞盒')) return;
                         let cardName = namePart
                             .replace('周柯宇爱意正值炽夏小卡抽抽乐-', '')
                             .replace('【补邮转链】「周柯宇 fully unlocked」爱意正值炽夏小卡抽抽乐.', '')
@@ -2442,183 +2700,329 @@
                         const packMatch = namePart.match(/(\d+)张/);
                         const packSize = packMatch ? parseInt(packMatch[1]) : 1;
                         const actualQty = qty * packSize;
-                        const norm = normalizeCardId(cardName);
+                        let norm = normalizeCardId(cardName);
+                        // 兜底：名称中直接提取卡面 token（如 'SSR6 小卡'、'R3卡面'）
+                        if (!norm) {
+                            const fb = String(cardName).match(/(SSSR|SSR|SR|R|N)\s*\d+/i);
+                            if (fb) norm = normalizeCardId(fb[0]);
+                        }
                         if (norm) map[wechat].counts[norm] = (map[wechat].counts[norm] || 0) + actualQty;
                     });
                 }
                 if (gift && gift.includes('奖品')) {
-                    gift.split(';').forEach(g => {
+                    gift.split(/[;；]/).forEach(g => {
                         g = g.trim();
                         if (!g || !g.includes('奖品')) return;
-                        const parts = g.split(':');
+                        const parts = g.split(/[:：]/); // 兼容半角/全角冒号
                         if (parts.length < 2) return;
-                        const cardName = parts[1].trim();
-                        if (!cardName || cardName.includes('端盒')) return;
-                        const norm = normalizeCardId(cardName);
-                        if (norm) map[wechat].counts[norm] = (map[wechat].counts[norm] || 0) + 1;
+                        let cardName = parts[1].trim();
+                        if (!cardName || cardName.includes('端盒') || cardName.includes('瑞盒')) return;
+                        // 支持 xN 数量（如 '奖品：SSR6x2'）
+                        let giftQty = 1;
+                        const gq = cardName.match(/[x×*]\s*(\d+)/i);
+                        if (gq) { giftQty = parseInt(gq[1], 10) || 1; cardName = cardName.replace(/[x×*]\s*\d+/i, '').trim(); }
+                        let norm = normalizeCardId(cardName);
+                        if (!norm) {
+                            const fb = String(cardName).match(/(SSSR|SSR|SR|R|N)\s*\d+/i);
+                            if (fb) norm = normalizeCardId(fb[0]);
+                        }
+                        if (norm) map[wechat].counts[norm] = (map[wechat].counts[norm] || 0) + giftQty;
                     });
                 }
             });
             return map;
         }
 
-        // ---------- 碎卡兑换审核核心逻辑（四态：通过/不通过/未找到用户/需人工复核） ----------
-        function auditSubmission(sub) {
-            const user = sub.user;
-            const userCards = user ? (userCardCountsMap[user.wechat] ? userCardCountsMap[user.wechat].counts : {}) : {};
-            const triedKeys = (sub.userMatch && sub.userMatch.triedKeys) ? sub.userMatch.triedKeys : [];
-            sub.requests.forEach(req => {
-                req.audit = auditRequest(req, user, userCards, triedKeys);
-            });
-            let hasPass = true, hasFail = false, hasNotFound = false, hasReview = false;
-            sub.requests.forEach(r => {
-                if (r.audit.type === '未找到用户') hasNotFound = true;
-                else if (r.audit.type === '需人工复核') hasReview = true;
-                else if (r.audit.type === '不通过') hasFail = true;
-                if (!r.audit.pass) hasPass = false;
-            });
-            const status = hasNotFound ? '未找到用户' : (hasReview ? '需人工复核' : ((hasFail || !hasPass) ? '不通过' : '通过'));
-            return { pass: status === '通过', status };
+        // ---------- 碎卡兑换审核核心逻辑（三态：通过/未找到用户/需人工处理） ----------
+        // 获取用户的卡面计数（聚合匹配时用合并后计数；否则按原账号计数）
+        function getUserCards(user) {
+            if (!user) return {};
+            if (user._isMerged) return user._mergedCounts || {};
+            return (userCardCountsMap[user.wechat] && userCardCountsMap[user.wechat].counts) ? userCardCountsMap[user.wechat].counts : {};
         }
 
-        function auditRequest(req, user, userCards, triedKeys) {
-            const reasons = [];
-            const inNorm = normalizeCardId(req.inCard);
-            const inQty = req.inQty > 0 ? req.inQty : 1;
+        // 逐请求前置检查：返回 [{ req, pre }]，pre 为空表示该请求可继续整体审核
+        function precheckAllRequests(requests, user, triedKeys) {
+            return requests.map(req => ({ req, pre: auditRequestPrecheck(req, user, triedKeys) }));
+        }
 
-            // 1) 未找到用户：匹配链（归一化手机号→订单号→昵称→收件人姓名）均未命中
+        // 将前置检查结果落盘到请求 audit（原因按请求精确定位，不重复贴到其他请求）
+        function applyPrecheckAudits(checkItems, groupStatus) {
+            checkItems.forEach(item => {
+                const req = item.req;
+                req.audit = {
+                    pass: false,
+                    type: item.pre ? item.pre.type : groupStatus,
+                    usedDraws: 0,
+                    inCard: normalizeCardId(req.inCard) || req.inCard || '',
+                    inQty: req.inQty > 0 ? req.inQty : 1,
+                    reasons: item.pre ? item.pre.reasons : []
+                };
+            });
+        }
+
+        function auditSubmission(sub, remainingDraws) {
+            const user = sub.user;
+            const userCards = getUserCards(user);
+            const triedKeys = (sub.userMatch && sub.userMatch.triedKeys) ? sub.userMatch.triedKeys : [];
+            // 前置检查：逐请求处理无法继续整体审核的情况（未找到用户/需人工处理）
+            const checkItems = precheckAllRequests(sub.requests, user, triedKeys);
+            const blockedItems = checkItems.filter(x => x.pre);
+            if (blockedItems.length > 0) {
+                const hasNotFound = blockedItems.some(x => x.pre.type === '未找到用户');
+                const st = hasNotFound ? '未找到用户' : '需人工处理';
+                applyPrecheckAudits(checkItems, st);
+                return { pass: false, status: st };
+            }
+            // 提交级整体审核：以提交为单位聚合换入/换出后统一判定
+            // remainingDraws：跨提交累计扣减后的剩余抽数（undefined 时回退用 user.totalDraws）
+            const result = auditSubmissionAggregated(sub, user, userCards, remainingDraws);
+            const status = result.pass ? '通过' : '需人工处理';
+            sub.requests.forEach(req => {
+                req.audit = {
+                    pass: result.pass,
+                    type: status,
+                    usedDraws: result.usedDraws,
+                    inCard: normalizeCardId(req.inCard) || req.inCard || '',
+                    inQty: req.inQty > 0 ? req.inQty : 1,
+                    reasons: result.reasons
+                };
+            });
+            return { pass: result.pass, status };
+        }
+
+        // 按手机号聚合所有提交的整体核算：同一组内所有提交的请求合并判定，
+        // 组内所有提交共享同一 audit 结果（通过/未找到用户/需人工处理）
+        function auditSubmissionsGrouped(subList, user, triedKeys) {
+            const allRequests = [];
+            subList.forEach(s => { s.requests.forEach(r => allRequests.push(r)); });
+            // 前置检查：逐请求定位原因
+            const checkItems = precheckAllRequests(allRequests, user, triedKeys);
+            const blockedItems = checkItems.filter(x => x.pre);
+            if (blockedItems.length > 0) {
+                const hasNotFound = blockedItems.some(x => x.pre.type === '未找到用户');
+                const st = hasNotFound ? '未找到用户' : '需人工处理';
+                applyPrecheckAudits(checkItems, st);
+                subList.forEach(s => { s.audit = { pass: false, status: st }; });
+                return { pass: false, status: st };
+            }
+            // 合并核算：将组内所有请求聚合为一个整体提交判定
+            const virtualSub = { requests: allRequests, user: user || (subList[0] && subList[0].user), userMatch: subList[0] && subList[0].userMatch };
+            const result = auditSubmissionAggregated(virtualSub, user || (subList[0] && subList[0].user), getUserCards(user || (subList[0] && subList[0].user)), (user || (subList[0] && subList[0].user)).totalDraws);
+            const status = result.pass ? '通过' : '需人工处理';
+            subList.forEach(s => { s.audit = { pass: result.pass, status }; });
+            allRequests.forEach(req => {
+                req.audit = {
+                    pass: result.pass,
+                    type: status,
+                    usedDraws: result.usedDraws,
+                    inCard: normalizeCardId(req.inCard) || req.inCard || '',
+                    inQty: req.inQty > 0 ? req.inQty : 1,
+                    reasons: result.reasons
+                };
+            });
+            return { pass: result.pass, status };
+        }
+
+        function auditRequestPrecheck(req, user, triedKeys) {
             if (!user) {
                 const tried = (triedKeys && triedKeys.length > 0 ? triedKeys.join('、') : '手机号/订单号/昵称/收件人姓名');
-                return { pass: false, type: '未找到用户', usedDraws: 0, inCard: inNorm || req.inCard || '', inQty, reasons: [`未找到用户（已尝试按${tried}匹配，均未命中）`] };
+                return { type: '未找到用户', reasons: [`未找到用户（已尝试按${tried}匹配，均未命中）`] };
             }
-            // 2) 需人工复核：换出卡明细格式复杂/端盒/长文本/无法解析
+            // 疑似测试数据：换入/换出内容含“测试”字样
+            const rawText = String(req.inCard || '') + ' ' + (req.outCards || []).map(o => o.card || '').join(' ');
+            if (/测试|test/i.test(rawText)) {
+                return { type: '需人工处理', reasons: ['疑似测试数据（换入/换出含“测试”字样），需人工处理'] };
+            }
             if (req.review) {
-                return { pass: false, type: '需人工复核', usedDraws: 0, inCard: inNorm || req.inCard || '', inQty, reasons: ['换出卡填写格式错误（未用标点分隔/格式复杂），需人工复核'] };
+                // 细分原因：端盒标记 / 括号备注异常 / 复杂格式
+                let why = '换出卡填写格式复杂（未用标点分隔或格式异常），需人工处理';
+                if (/端盒|瑞盒/.test(rawText)) why = '换出含「端盒/瑞盒」标记，需人工处理';
+                else if (/[（(]/.test(String(req.inCard || ''))) why = '换出卡括号备注格式异常（非纯数量备注），需人工处理';
+                return { type: '需人工处理', reasons: [why] };
             }
-            // 3) 需人工复核：换入卡面无法识别
-            if (!inNorm) {
-                return { pass: false, type: '需人工复核', usedDraws: 0, inCard: '', inQty, reasons: ['换入卡面无法识别：' + (req.inCard || '（空）')] };
+            if (!normalizeCardId(req.inCard)) {
+                return { type: '需人工处理', reasons: ['换入卡面无法识别：' + (req.inCard || '（空）')] };
             }
-            // 4) 需人工复核：换出卡空白（未填写换出卡明细）
             if (req.outCards.length === 0) {
-                return { pass: false, type: '需人工复核', usedDraws: 0, inCard: inNorm, inQty, reasons: ['换出卡空白（未填写换出卡明细），需人工核实'] };
+                const hasRaw = String(req.outRaw || '').trim() || String(req.outQtyRaw || '').trim();
+                if (hasRaw) {
+                    return { type: '需人工处理', reasons: [`换出卡填写内容未解析出有效卡面（原始内容：${String(hasRaw).slice(0, 40)}），需人工处理`] };
+                }
+                return { type: '需人工处理', reasons: ['换出卡空白（换出卡数为0，未填写换出卡明细），需人工核实'] };
+            }
+            return null;
+        }
+
+        // 提交级整体审核：聚合整个提交的所有请求后统一判定
+        // remainingDraws：跨提交累计扣减后的剩余抽数（undefined 时回退用 user.totalDraws）
+        function auditSubmissionAggregated(sub, user, userCards, remainingDraws) {
+            const reasons = [];
+            // 聚合换入/换出
+            let totalIn = 0, inSR = 0, inR = 0, inSSR = 0;
+            let totalOut = 0, outSSR = 0;
+            const outAgg = {};
+            sub.requests.forEach(req => {
+                const inNorm = normalizeCardId(req.inCard);
+                const inQty = req.inQty > 0 ? req.inQty : 1;
+                totalIn += inQty;
+                if (/^SSR\d/.test(inNorm) || /^SSSR\d/.test(inNorm)) inSSR += inQty;
+                else if (/^SR\d/.test(inNorm)) inSR += inQty;
+                else if (/^R\d/.test(inNorm)) inR += inQty;
+                req.outCards.forEach(o => {
+                    const cNorm = normalizeCardId(o.card);
+                    const qty = o.qty || 0;
+                    if (!cNorm) { reasons.push(`换出卡 ${o.card} 无法识别`); return; }
+                    totalOut += qty;
+                    outAgg[cNorm] = (outAgg[cNorm] || 0) + qty;
+                    if (/^SSR\d/.test(cNorm) || /^SSSR\d/.test(cNorm)) outSSR += qty;
+                });
+            });
+
+            // SSR平换识别：换出中的SSR优先按1:1平换（1张SSR抵1张，72抽），需换入含SSR
+            let swapSSR = 0;
+            if (outSSR > 0) {
+                if (inSSR === 0) {
+                    reasons.push(`换出含SSR（${outSSR}张），但换入中没有SSR，无法平换`);
+                } else if (outSSR > inSSR) {
+                    reasons.push(`换出SSR（${outSSR}张）多于换入SSR（${inSSR}张），多余SSR无法平换，判定需人工处理`);
+                    swapSSR = inSSR;
+                } else {
+                    swapSSR = outSSR;
+                }
+            }
+            const requiredOut = 6 * (totalIn - swapSSR) + 1 * swapSSR;
+
+            // a. 资格判断：SR/R按36抽/张、SSR（含平换）按72抽/张、其他按72抽/张
+            //    （活动方确认：兑换1张sr或r消耗36抽，兑换1张ssr消耗72抽）
+            //    跨提交累计：此前已通过提交消耗的抽数不可再次使用（规则：已兑换抽数不可叠加）
+            const usedDraws = 36 * inSR + 36 * inR + 72 * inSSR + 72 * (totalIn - inSR - inR - inSSR);
+            const drawsBase = (remainingDraws === undefined || remainingDraws === null) ? user.totalDraws : remainingDraws;
+            if (drawsBase < usedDraws) {
+                const usedBefore = user.totalDraws - drawsBase;
+                reasons.push(usedBefore > 0
+                    ? `抽数不足（本单需${usedDraws}抽，此前已用${usedBefore}抽，剩余${drawsBase}抽）`
+                    : `总抽数不足（需${usedDraws}抽，实际${user.totalDraws}抽）`);
             }
 
-            const isInSR = /^SR\d/.test(inNorm);
-            const isInSSR = /^SSR\d/.test(inNorm) || /^SSSR\d/.test(inNorm);
-
-            const totalOut = req.outCards.reduce((s, o) => s + (o.qty || 0), 0);
-            const allOutIsRSR = req.outCards.length > 0 && req.outCards.every(o => /^(R|SR|N)\d/.test(normalizeCardId(o.card)));
-            const allOutIsSSR = req.outCards.length > 0 && req.outCards.every(o => /^(SSR|SSSR)\d/.test(normalizeCardId(o.card)));
-
-            // 兑换类型判定：sr 且换出全r/sr且6张→36抽；ssr且换出1张ssr→72抽平换；其他→72抽换任意
-            let type, costPerUnit, isSSRSwap = false;
-            if (isInSR && totalOut === 6 * inQty && allOutIsRSR) {
-                type = '36抽换SR'; costPerUnit = 36;
-            } else if (isInSSR && req.outCards.length === 1 && totalOut === inQty && allOutIsSSR) {
-                type = '72抽SSR平换'; costPerUnit = 72; isSSRSwap = true;
-            } else if (isInSSR) {
-                type = '72抽换任意(SSR)'; costPerUnit = 72;
-            } else if (isInSR) {
-                type = '72抽换任意(SR)'; costPerUnit = 72;
-            } else {
-                type = '72抽换任意'; costPerUnit = 72;
-            }
-            const usedDraws = costPerUnit * inQty;
-
-            // a. 资格判断
-            if (user.totalDraws < usedDraws) {
-                reasons.push(`总抽数不足（需${usedDraws}抽，实际${user.totalDraws}抽）`);
-            }
-
-            // b. 换出卡总张数
-            const requiredOut = isSSRSwap ? (1 * inQty) : (6 * inQty);
+            // b. 换出卡总张数（以提交为单位整体核对）
             if (totalOut !== requiredOut) {
-                reasons.push(`换出卡总张数不为${requiredOut}（实际${totalOut}张），请检查是否漏填或合并填写`);
+                const why = swapSSR > 0 ? `（SSR平换${swapSSR}张×1，其余${totalIn - swapSSR}张×6）` : '';
+                const diff = totalOut - requiredOut;
+                const hint = diff > 0 ? `，疑似多填${diff}张` : `，疑似漏填${-diff}张`;
+                reasons.push(`换出卡张数异常（应为${requiredOut}张${why}，实际${totalOut}张${hint}）`);
             }
 
-            // c. 换出卡类型
-            if (isSSRSwap) {
-                if (!allOutIsSSR) reasons.push('SSR平换换出卡必须都是SSR');
-            } else {
-                const bad = req.outCards.filter(o => !/^(R|SR|N)\d/.test(normalizeCardId(o.card)));
-                if (bad.length > 0) reasons.push(`换出卡含SSR/异常，本类型仅允许r/sr（异常：${bad.map(o => o.card).join('、')}）`);
-            }
-
-            // d. 严格核对卡面+张数
-            req.outCards.forEach(o => {
-                const cNorm = normalizeCardId(o.card);
-                if (!cNorm) { reasons.push(`换出卡 ${o.card} 无法识别`); return; }
+            // c. 卡面+张数核对（提交级聚合）
+            const ownedCards = Object.keys(userCards).filter(k => (userCards[k] || 0) > 0).sort();
+            const ownedBrief = ownedCards.slice(0, 15).map(k => `${k}x${userCards[k]}`).join('、') + (ownedCards.length > 15 ? '等' : '');
+            Object.keys(outAgg).forEach(cNorm => {
+                const qty = outAgg[cNorm];
                 const actual = userCards[cNorm] || 0;
                 if (actual === 0) {
-                    reasons.push(`换出卡 ${cNorm} 未在该用户订单中抽到`);
-                } else if (actual < (o.qty || 0)) {
-                    reasons.push(`换出卡 ${cNorm} 数量不足（需${o.qty}张，实际${actual}张）`);
+                    if (ownedCards.length === 0) {
+                        reasons.push(`换出卡 ${cNorm} 未在该用户订单中抽到（该用户暂无任何卡面记录）`);
+                    } else {
+                        reasons.push(`换出卡 ${cNorm} 未在该用户订单中抽到（该用户已持有：${ownedBrief}，请核对是否漏统计或格式未识别）`);
+                    }
+                } else if (actual < qty) {
+                    reasons.push(`换出卡 ${cNorm} 数量不足（需${qty}张，实际${actual}张）`);
                 }
             });
 
-            // e. 换入卡面合法性
-            if (isSSRSwap) {
-                if (!isInSSR) reasons.push('SSR平换换入必须是SSR');
-            } else if (type === '36抽换SR') {
-                if (!isInSR) reasons.push('36抽换SR换入卡面应以SR开头');
-            }
-
-            const pass = reasons.length === 0;
-            return { pass, type: pass ? '通过' : '不通过', usedDraws, inCard: inNorm, inQty, reasons };
+            return { pass: reasons.length === 0, usedDraws, reasons };
         }
 
-        // ---------- 碎卡审核结果渲染（四态） ----------
+        // ---------- 碎卡审核结果渲染（三态：通过/未找到用户/需人工处理） ----------
         function renderSuikaResults() {
             const submissions = suikaSubmissions;
             const totalSubmits = submissions.length;
-            let passCount = 0, failCount = 0, notFoundCount = 0, reviewCount = 0, totalRequests = 0;
+            let passCount = 0, notFoundCount = 0, handleCount = 0, totalRequests = 0;
             submissions.forEach(s => {
                 totalRequests += s.requests.length;
                 if (s.audit.status === '通过') passCount++;
-                else if (s.audit.status === '不通过') failCount++;
                 else if (s.audit.status === '未找到用户') notFoundCount++;
-                else if (s.audit.status === '需人工复核') reviewCount++;
+                else handleCount++;
             });
             document.getElementById('suikaTotalSubmits').textContent = totalSubmits;
             document.getElementById('suikaTotalRequests').textContent = totalRequests;
             document.getElementById('suikaPassCount').textContent = passCount;
-            document.getElementById('suikaFailCount').textContent = failCount;
             document.getElementById('suikaNotFoundCount').textContent = notFoundCount;
-            document.getElementById('suikaReviewCount').textContent = reviewCount;
+            document.getElementById('suikaHandleCount').textContent = handleCount;
 
             const statusMeta = {
                 '通过': { bg: '#f0fdf4', color: '#059669', badge: '✓ 通过' },
-                '不通过': { bg: '#fef2f2', color: '#ef4444', badge: '✗ 不通过' },
                 '未找到用户': { bg: '#fff7ed', color: '#ea580c', badge: '⚠ 未找到用户' },
-                '需人工复核': { bg: '#fefce8', color: '#ca8a04', badge: '◍ 需人工复核' }
+                '需人工处理': { bg: '#fefce8', color: '#ca8a04', badge: '◍ 需人工处理' }
+            };
+            const metaOf = st => statusMeta[st] || statusMeta['需人工处理'];
+            const badgeHtml = (st, meta) => `<span style="color:${meta.color};font-weight:bold;">${meta.badge}</span>`;
+            const mergeTagOf = user => (user && user._isMerged)
+                ? `<span style="display:inline-block;background:#eef2ff;color:#4f46e5;padding:1px 8px;border-radius:10px;font-size:11px;margin-left:6px;" title="已按手机号聚合 ${user.mergedFrom.join('、')}">聚合${user.mergedFrom.length}账号</span>`
+                : '';
+            const phoneCellOf = (s) => {
+                const user = s.user;
+                if (user && user._isMerged) {
+                    return `<div>${s.phone || '-'}${mergeTagOf(user)}</div><div style="font-size:11px;color:#818cf8;margin-top:2px;">含账号：${user.mergedFrom.join('、')}（卡面/抽数已聚合）</div>`;
+                }
+                return `<div>${s.phone || '-'}</div>`;
+            };
+            const cardBadgeOf = (reasons) => {
+                const hasCardIssue = (reasons || []).some(x => /未在该用户订单中抽到|数量不足/.test(x));
+                return hasCardIssue
+                    ? '<span style="display:inline-block;background:#fef2f2;color:#ef4444;padding:1px 8px;border-radius:10px;font-size:11px;margin-left:6px;" title="卡面核对未通过：换出卡未抽到或数量不足">✗ 卡面</span>'
+                    : '<span style="display:inline-block;background:#f0fdf4;color:#059669;padding:1px 8px;border-radius:10px;font-size:11px;margin-left:6px;" title="卡面核对通过">✓ 卡面</span>';
+            };
+            const inStrOf = r => r.audit.inCard ? (r.audit.inCard + (r.audit.inQty > 1 ? 'x' + r.audit.inQty : '')) : (r.inCard || '（空）');
+            const outStrOf = r => r.outCards.map(o => o.card + ((o.qty || 0) > 1 ? 'x' + o.qty : '')).join('、');
+            const reasonStrOf = (s, ri) => {
+                const r = s.requests[ri];
+                if (r.audit.pass) return '';
+                return (s.requests.length > 1 ? `[请求${ri + 1}] ` : '') + (r.audit.reasons || []).join('；');
             };
 
-            const tbody = document.getElementById('suikaResultBody');
-            tbody.innerHTML = submissions.map(s => {
-                const user = s.user;
-                const status = s.audit.status || (s.audit.pass ? '通过' : '不通过');
-                const meta = statusMeta[status] || statusMeta['不通过'];
-                const typeStr = s.requests.map(r => r.audit.type).filter((v, i, a) => a.indexOf(v) === i).join('、');
-                const inStr = s.requests.map(r => r.audit.inCard ? (r.audit.inCard + (r.audit.inQty > 1 ? 'x' + r.audit.inQty : '')) : (r.inCard || '（空）')).join('、');
-                const outStr = s.requests.map(r => r.outCards.map(o => o.card + ((o.qty || 0) > 1 ? 'x' + o.qty : '')).join('、')).join(' ； ');
-                const reasonStr = s.requests.map((r, ri) => {
-                    if (r.audit.pass) return '';
-                    return (s.requests.length > 1 ? `[请求${ri + 1}] ` : '') + r.audit.reasons.join('；');
-                }).filter(Boolean).join('<br>');
-                const badge = `<span style="color:${meta.color};font-weight:bold;">${meta.badge}</span>`;
+            // 提交级审核汇总表（整体判定口径，一行一提交）
+            const summaryBody = document.getElementById('suikaSubmitSummaryBody');
+            summaryBody.innerHTML = submissions.map(s => {
+                const status = s.audit.status || (s.audit.pass ? '通过' : '需人工处理');
+                const meta = metaOf(status);
+                const inStr = s.requests.map(r => inStrOf(r)).join('、');
+                const outStr = s.requests.map(r => outStrOf(r)).join(' ； ');
+                const reasonStr = s.requests.map((r, ri) => reasonStrOf(s, ri)).filter(Boolean).join('<br>') || status;
+                const allReasons = s.requests.flatMap(r => r.audit.reasons || []);
                 return `<tr style="background:${meta.bg};">
                     <td>${s.code}</td>
                     <td>${s.nickname || '-'}</td>
-                    <td>${s.phone || '-'}</td>
-                    <td>${user ? user.totalDraws : '-'}</td>
-                    <td>${typeStr || '-'}</td>
-                    <td>${inStr || '-'}</td>
+                    <td>${phoneCellOf(s)}</td>
+                    <td>${s.requests.length}</td>
+                    <td style="max-width:200px;font-size:12px;">${inStr || '-'}</td>
                     <td style="max-width:260px;font-size:12px;">${outStr || '-'}</td>
-                    <td>${badge}</td>
-                    <td style="max-width:320px;font-size:12px;color:${meta.color};">${reasonStr || status}</td>
+                    <td>${badgeHtml(status, meta)}${cardBadgeOf(allReasons)}</td>
+                    <td style="max-width:320px;font-size:12px;color:${meta.color};">${reasonStr}</td>
                 </tr>`;
             }).join('');
+
+            // 请求级明细表（逐请求核对，供查看）
+            const tbody = document.getElementById('suikaResultBody');
+            tbody.innerHTML = submissions.flatMap(s => s.requests.map((r, ri) => {
+                const st = r.audit.type || s.audit.status || '需人工处理';
+                const meta = metaOf(st);
+                const user = s.user;
+                const typeStr = r.audit.type || st;
+                const reasonStr = reasonStrOf(s, ri) || st;
+                return `<tr style="background:${meta.bg};">
+                    <td>${s.code}</td>
+                    <td>${ri + 1}/${s.requests.length}</td>
+                    <td>${s.nickname || '-'}</td>
+                    <td>${phoneCellOf(s)}</td>
+                    <td>${user ? user.totalDraws : '-'}${user && user._isMerged ? '' : mergeTagOf(user)}</td>
+                    <td>${typeStr}</td>
+                    <td>${inStrOf(r) || '-'}</td>
+                    <td style="max-width:260px;font-size:12px;">${outStrOf(r) || '-'}</td>
+                    <td>${badgeHtml(st, meta)}${cardBadgeOf(r.audit.reasons || [])}</td>
+                    <td style="max-width:320px;font-size:12px;color:${meta.color};">${reasonStr}</td>
+                </tr>`;
+            })).join('');
         }
 
         // ---------- 兑换获得卡汇总（碎卡兑换获得卡 / 宣传集赞礼） ----------
@@ -2701,29 +3105,40 @@
         function exportSuikaResult() {
             if (!suikaSubmissions || suikaSubmissions.length === 0) { alert('请先上传并审核碎卡兑换表'); return; }
             const rows = buildSuikaRequestRows();
-            const byStatus = { '通过': [], '不通过': [], '未找到用户': [], '需人工复核': [] };
-            rows.forEach(r => { (byStatus[r.audit.type] || byStatus['不通过']).push(r); });
+            const byStatus = { '通过': [], '未找到用户': [], '需人工处理': [] };
+            rows.forEach(r => { (byStatus[r.audit.type] || byStatus['需人工处理']).push(r); });
+
+            // 提交级汇总 sheet（整体判定口径）
+            const summaryHeaders = ['提交编号', '昵称', '手机号', '请求数', '换入汇总', '换出汇总', '审核结果', '原因汇总', '提交时间'];
+            const summaryData = suikaSubmissions.map(s => {
+                const status = s.audit.status || (s.audit.pass ? '通过' : '需人工处理');
+                const inStr = s.requests.map(r => r.audit.inCard ? (r.audit.inCard + (r.audit.inQty > 1 ? 'x' + r.audit.inQty : '')) : (r.inCard || '（空）')).join('、');
+                const outStr = s.requests.map(r => r.outCards.map(o => o.card + ((o.qty || 0) > 1 ? 'x' + o.qty : '')).join('、')).join(' ； ');
+                const reasonStr = s.requests.map((r, ri) => {
+                    if (r.audit.pass) return '';
+                    return (s.requests.length > 1 ? `[请求${ri + 1}] ` : '') + (r.audit.reasons || []).join('；');
+                }).filter(Boolean).join('；') || status;
+                return [s.code, s.nickname || '', s.phone || '', s.requests.length, inStr, outStr, status, reasonStr, s.submitTime || ''];
+            });
 
             const passHeaders = ['提交编号', '昵称', '手机号', '订单号', '兑换类型', '换入卡面', '换出卡明细', '提交时间'];
-            const failHeaders = ['提交编号', '昵称', '手机号', '订单号', '兑换类型', '换入卡面', '换入张数', '换出卡明细', '换出总张数', '原因明细', '提交时间'];
-            const notFoundHeaders = ['提交编号', '昵称', '原始手机号', '订单号', '换入卡面', '换出卡明细', '疑似原因', '提交时间'];
-            const reviewHeaders = ['提交编号', '昵称', '手机号', '订单号', '兑换类型', '换入卡面', '换入张数', '换出卡明细', '换出总张数', '原因明细', '提交时间'];
+            const notFoundHeaders = ['提交编号', '昵称', '原始手机号', '订单号', '请求序号', '换入卡面', '换出卡明细', '疑似原因', '提交时间'];
+            const handleHeaders = ['提交编号', '昵称', '手机号', '订单号', '请求序号', '兑换类型', '换入卡面', '换入张数', '换出卡明细', '换出总张数', '原因明细', '提交时间'];
 
             const passData = byStatus['通过'].map(r => [r.code, r.nickname, r.phone, r.orderNo, r.audit.type, r.inCard, r.outStr, r.submitTime]);
-            const failData = byStatus['不通过'].map(r => [r.code, r.nickname, r.phone, r.orderNo, r.audit.type, r.inCard, r.inQty, r.outStr, r.totalOut, r.audit.reasons.join('；'), r.submitTime]);
-            const notFoundData = byStatus['未找到用户'].map(r => [r.code, r.nickname, r.phone, r.orderNo, r.inCard, r.outStr, r.audit.reasons.join('；'), r.submitTime]);
-            const reviewData = byStatus['需人工复核'].map(r => [r.code, r.nickname, r.phone, r.orderNo, r.audit.type, r.inCard, r.inQty, r.outStr, r.totalOut, r.audit.reasons.join('；'), r.submitTime]);
+            const notFoundData = byStatus['未找到用户'].map(r => [r.code, r.nickname, r.phone, r.orderNo, r.ri, r.inCard, r.outStr, r.audit.reasons.join('；'), r.submitTime]);
+            const handleData = byStatus['需人工处理'].map(r => [r.code, r.nickname, r.phone, r.orderNo, r.ri, r.audit.type, r.inCard, r.inQty, r.outStr, r.totalOut, r.audit.reasons.join('；'), r.submitTime]);
 
             const wb = XLSX.utils.book_new();
-            const mkSheet = (name, headers, data) => {
+            const mkSheet = (name, headers, data, wideIdx) => {
                 const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
-                ws['!cols'] = headers.map((h, i) => ({ wch: (i === 6 || i === 9) ? 60 : 16 }));
+                ws['!cols'] = headers.map((h, i) => ({ wch: (wideIdx && wideIdx.indexOf(i) >= 0) ? 60 : 16 }));
                 XLSX.utils.book_append_sheet(wb, ws, name);
             };
-            mkSheet('通过审核', passHeaders, passData);
-            mkSheet('不通过审核', failHeaders, failData);
-            mkSheet('未找到用户', notFoundHeaders, notFoundData);
-            mkSheet('需人工复核', reviewHeaders, reviewData);
+            mkSheet('提交级汇总', summaryHeaders, summaryData, [4, 5, 7]);
+            mkSheet('通过审核', passHeaders, passData, [6]);
+            mkSheet('未找到用户', notFoundHeaders, notFoundData, [6, 7]);
+            mkSheet('需人工处理', handleHeaders, handleData, [8, 10]);
             mkSheet('碎卡兑换获得卡汇总', ['卡面编号', '稀有度', '获得张数', '占比'], buildSuikaGainSummary());
             XLSX.writeFile(wb, getTimestampFilename('碎卡兑换审核结果'));
         }
@@ -2920,17 +3335,24 @@
             const ws3 = XLSX.utils.aoa_to_sheet([h3, ...d3]);
             ws3['!cols'] = [{ wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 10 }];
             XLSX.utils.book_append_sheet(wb, ws3, '宣传集赞礼汇总');
+            // 来豹接龙查询表：与导出数据按钮中的来豹接龙查询表一致，方便宣传礼发放后用户自助查询
+            const ws4 = userData && userData.length > 0
+                ? exportLaibaoSheet()
+                : XLSX.utils.aoa_to_sheet([['未上传主数据，无法生成来豹接龙查询表']]);
+            ws4['!cols'] = [{ wch: 22 }, { wch: 24 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 14 }];
+            XLSX.utils.book_append_sheet(wb, ws4, '来豹接龙查询表');
             XLSX.writeFile(wb, getTimestampFilename('集赞导入结果'));
         }
 
         // ---------- 用户详情面板 ----------
         function renderUserDetail(user) {
+            window.__detailUser = user; // 供订单明细弹窗按钮使用
             const suikaInfos = suikaAuditMap[user.wechat] || [];
-            const suikaMeta = { '通过': '#059669', '不通过': '#ef4444', '未找到用户': '#ea580c', '需人工复核': '#ca8a04' };
+            const suikaMeta = { '通过': '#059669', '未找到用户': '#ea580c', '需人工处理': '#ca8a04' };
             const suikaHtml = suikaInfos.length > 0
                 ? suikaInfos.map(s => {
-                    const status = s.audit.status || (s.audit.pass ? '通过' : '不通过');
-                    const color = suikaMeta[status] || '#ef4444';
+                    const status = s.audit.status || (s.audit.pass ? '通过' : '需人工处理');
+                    const color = suikaMeta[status] || '#ca8a04';
                     const detail = s.requests.map(r => r.audit.type + (r.audit.reasons.length ? '（' + r.audit.reasons.join('；') + '）' : '')).join('；');
                     return `<div style="font-size:12px;line-height:1.7;color:${color};">【${s.code}】${status}：${detail}</div>`;
                 }).join('')
@@ -2942,14 +3364,15 @@
 
             document.getElementById('userDetailPanel').innerHTML = `
                 <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-                    <h3 style="margin:0;color:#667eea;">👤 用户详情</h3>
+                    <h3 style="margin:0;color:#20517d;">👤 用户详情</h3>
                     <span style="font-size:12px;color:#999;">搜索命中单个用户</span>
                 </div>
                 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-top:12px;">
                     <div><div style="font-size:11px;color:#999;">下单账号</div><div style="font-weight:bold;">${user.wechat || '-'}</div></div>
                     <div><div style="font-size:11px;color:#999;">手机号</div><div style="font-weight:bold;">${user.phone || '-'}</div></div>
-                    <div><div style="font-size:11px;color:#999;">订单号</div><div style="font-weight:bold;font-size:12px;">${user.orderNos || '-'}</div></div>
-                    <div><div style="font-size:11px;color:#999;">总抽数</div><div style="font-weight:bold;color:#667eea;">${user.totalDraws || 0}</div></div>
+                    <div><div style="font-size:11px;color:#999;">订单号</div><div style="font-weight:bold;font-size:12px;word-break:break-all;">${user.orderNos || '-'}</div>
+                        <button onclick="window.__detailUser && showOrderModal(window.__detailUser)" style="margin-top:6px;border:1px solid #20517d;background:#fff;color:#20517d;padding:4px 12px;border-radius:8px;font-size:12px;cursor:pointer;">📦 查看订单明细</button></div>
+                    <div><div style="font-size:11px;color:#999;">总抽数</div><div style="font-weight:bold;color:#20517d;">${user.totalDraws || 0}</div></div>
                     <div><div style="font-size:11px;color:#999;">宣传集赞礼</div><div>${giftHtml}</div></div>
                 </div>
                 <div style="margin-top:12px;">
@@ -2961,6 +3384,74 @@
                     ${suikaHtml}
                 </div>
             `;
+        }
+
+        // ---------- 订单详情弹窗 ----------
+        function orderModalHtml(user) {
+            if (!user) return '';
+            const esc = s => String(s === undefined || s === null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const rows = [];
+            const orderDraws = (user.orderDraws || []).slice().sort((a, b) => {
+                const ta = a.time ? a.time.getTime() : 0;
+                const tb = b.time ? b.time.getTime() : 0;
+                return ta - tb;
+            });
+            orderDraws.forEach((o, i) => {
+                const tags = [];
+                if (o.isDuanhe) tags.push('<span style="background:#fef3c7;color:#d97706;padding:1px 6px;border-radius:4px;font-size:11px;">端盒</span>');
+                if (o.isPrize) tags.push('<span style="background:#e0e7ff;color:#4f46e5;padding:1px 6px;border-radius:4px;font-size:11px;">奖品</span>');
+                const timeStr = o.time && !isNaN(o.time.getTime()) ? o.time.toLocaleString('zh-CN', { hour12: false }) : '-';
+                rows.push(`<tr>
+                    <td style="padding:6px 10px;border-bottom:1px solid #f0f0f0;font-size:12px;">${i + 1}</td>
+                    <td style="padding:6px 10px;border-bottom:1px solid #f0f0f0;font-size:12px;word-break:break-all;">${esc(o.orderNo || '-')}</td>
+                    <td style="padding:6px 10px;border-bottom:1px solid #f0f0f0;font-size:12px;">${timeStr}</td>
+                    <td style="padding:6px 10px;border-bottom:1px solid #f0f0f0;font-size:12px;text-align:center;">${o.draws || 0}</td>
+                    <td style="padding:6px 10px;border-bottom:1px solid #f0f0f0;font-size:12px;">${tags.join(' ') || '<span style="color:#999;">-</span>'}</td>
+                </tr>`);
+            });
+            const buyouRows = (user.buyouOrders || []).map((b, i) => {
+                const timeStr = b.time && !isNaN(b.time.getTime()) ? b.time.toLocaleString('zh-CN', { hour12: false }) : '-';
+                return `<tr>
+                    <td style="padding:6px 10px;border-bottom:1px solid #f0f0f0;font-size:12px;">${i + 1}</td>
+                    <td style="padding:6px 10px;border-bottom:1px solid #f0f0f0;font-size:12px;word-break:break-all;">${esc(b.orderNo || '-')}</td>
+                    <td style="padding:6px 10px;border-bottom:1px solid #f0f0f0;font-size:12px;">${timeStr}</td>
+                    <td style="padding:6px 10px;border-bottom:1px solid #f0f0f0;font-size:12px;text-align:center;">${b.count || 0}</td>
+                </tr>`;
+            });
+            const orderBody = rows.length > 0
+                ? `<table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#eef4fa;"><th style="padding:8px 10px;font-size:12px;text-align:left;">#</th><th style="padding:8px 10px;font-size:12px;text-align:left;">订单号</th><th style="padding:8px 10px;font-size:12px;text-align:left;">时间</th><th style="padding:8px 10px;font-size:12px;">抽数</th><th style="padding:8px 10px;font-size:12px;text-align:left;">标记</th></tr></thead><tbody>${rows.join('')}</tbody></table>`
+                : '<div style="color:#999;font-size:12px;padding:8px 0;">无订单明细数据</div>';
+            const buyouBody = buyouRows.length > 0
+                ? `<table style="width:100%;border-collapse:collapse;margin-top:8px;"><thead><tr style="background:#eef4fa;"><th style="padding:8px 10px;font-size:12px;text-align:left;">#</th><th style="padding:8px 10px;font-size:12px;text-align:left;">补邮订单号</th><th style="padding:8px 10px;font-size:12px;text-align:left;">时间</th><th style="padding:8px 10px;font-size:12px;">补邮份数</th></tr></thead><tbody>${buyouRows.join('')}</tbody></table>`
+                : '';
+            return `
+                <div style="position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;" onclick="if(event.target===this)closeOrderModal()">
+                    <div style="background:#fff;border-radius:14px;max-width:760px;width:100%;max-height:82vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,0.25);">
+                        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-bottom:1px solid #f0f0f0;position:sticky;top:0;background:#fff;border-radius:14px 14px 0 0;">
+                            <div>
+                                <span style="font-weight:bold;font-size:15px;">📦 订单详情</span>
+                                <span style="margin-left:8px;font-size:12px;color:#999;">${esc(user.wechat || '-')}（总抽数 ${user.totalDraws || 0}）</span>
+                            </div>
+                            <button onclick="closeOrderModal()" style="border:none;background:#f0f0f0;width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:14px;line-height:1;">✕</button>
+                        </div>
+                        <div style="padding:16px 20px;">
+                            <div style="font-size:12px;color:#20517d;font-weight:bold;margin-bottom:6px;">订单明细（${orderDraws.length} 单）</div>
+                            ${orderBody}
+                            ${buyouBody ? `<div style="font-size:12px;color:#20517d;font-weight:bold;margin-top:12px;">补邮订单（${buyouOrders.length} 单）</div>${buyouBody}` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        function showOrderModal(user) {
+            const div = document.createElement('div');
+            div.id = 'orderModalWrap';
+            div.innerHTML = orderModalHtml(user);
+            document.body.appendChild(div);
+        }
+        function closeOrderModal() {
+            const el = document.getElementById('orderModalWrap');
+            if (el) el.remove();
         }
     </script>
 </body>
