@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>抽抽乐订单数据分析（待优化 2026.8.26 22：30更新）</title>
+    <title>抽抽乐订单数据分析（待优化 2026.8.26 23：50更新）</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <style>
@@ -110,7 +110,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>📊 抽抽乐订单数据分析（待优化2026.8.26 22：30更新）</h1>
+            <h1>📊 抽抽乐订单数据分析（待优化2026.8.26 23：50更新）</h1>
             <p>上传Excel文件，自动生成数据分析报告</p>
         </div>
 
@@ -2532,6 +2532,10 @@
                     missing.forEach(o => { o.qty = 1; });
                 } else if (nums.length === 1 && parseInt(nums[0], 10) === missing.length) {
                     missing.forEach(o => { o.qty = 1; });
+                } else if (qty.trim() === '') {
+                    // 张数列空白：多卡面列表默认各 1 张（如 'R32、R33、R31、R34、R38、R40'）
+                    // 张数审核仍会按 6×(n) 校验总张数，张数不合规时转需人工处理，不会放行漏填数量
+                    missing.forEach(o => { o.qty = 1; });
                 } else {
                     review = true;
                 }
@@ -2795,7 +2799,7 @@
         // 组内所有提交共享同一 audit 结果（通过/未找到用户/需人工处理）
         function auditSubmissionsGrouped(subList, user, triedKeys) {
             const allRequests = [];
-            subList.forEach(s => { s.requests.forEach(r => allRequests.push(r)); });
+            subList.forEach(s => { s.requests.forEach(r => { r._subCode = s.code; allRequests.push(r); }); });
             // 前置检查：逐请求定位原因
             const checkItems = precheckAllRequests(allRequests, user, triedKeys);
             const blockedItems = checkItems.filter(x => x.pre);
@@ -2803,7 +2807,8 @@
                 const hasNotFound = blockedItems.some(x => x.pre.type === '未找到用户');
                 const st = hasNotFound ? '未找到用户' : '需人工处理';
                 applyPrecheckAudits(checkItems, st);
-                subList.forEach(s => { s.audit = { pass: false, status: st }; });
+                const blockedCodes = Array.from(new Set(blockedItems.map(x => (x.req._subCode || '')).filter(Boolean))).join('、');
+                subList.forEach(s => { s.audit = { pass: false, status: st, blockedFrom: blockedCodes }; });
                 return { pass: false, status: st };
             }
             // 合并核算：将组内所有请求聚合为一个整体提交判定
@@ -2988,7 +2993,13 @@
                 const meta = metaOf(status);
                 const inStr = s.requests.map(r => inStrOf(r)).join('、');
                 const outStr = s.requests.map(r => outStrOf(r)).join(' ； ');
-                const reasonStr = s.requests.map((r, ri) => reasonStrOf(s, ri)).filter(Boolean).join('<br>') || status;
+                const selfReasons = s.requests.map((r, ri) => reasonStrOf(s, ri)).filter(Boolean);
+                let reasonStr = selfReasons.join('<br>');
+                if (!reasonStr) {
+                    if (status === '通过') reasonStr = '通过';
+                    else if (s.audit.blockedFrom) reasonStr = `同手机号其他提交需人工处理（${s.audit.blockedFrom}）`;
+                    else reasonStr = status;
+                }
                 const allReasons = s.requests.flatMap(r => r.audit.reasons || []);
                 return `<tr style="background:${meta.bg};">
                     <td>${s.code}</td>
@@ -3114,10 +3125,12 @@
                 const status = s.audit.status || (s.audit.pass ? '通过' : '需人工处理');
                 const inStr = s.requests.map(r => r.audit.inCard ? (r.audit.inCard + (r.audit.inQty > 1 ? 'x' + r.audit.inQty : '')) : (r.inCard || '（空）')).join('、');
                 const outStr = s.requests.map(r => r.outCards.map(o => o.card + ((o.qty || 0) > 1 ? 'x' + o.qty : '')).join('、')).join(' ； ');
-                const reasonStr = s.requests.map((r, ri) => {
+                const reasonStr = (s.requests.map((r, ri) => {
                     if (r.audit.pass) return '';
                     return (s.requests.length > 1 ? `[请求${ri + 1}] ` : '') + (r.audit.reasons || []).join('；');
-                }).filter(Boolean).join('；') || status;
+                }).filter(Boolean).join('；'))
+                    || (status === '通过' ? '通过'
+                        : (s.audit.blockedFrom ? `同手机号其他提交需人工处理（${s.audit.blockedFrom}）` : status));
                 return [s.code, s.nickname || '', s.phone || '', s.requests.length, inStr, outStr, status, reasonStr, s.submitTime || ''];
             });
 
