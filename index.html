@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>抽抽乐订单数据分析（待优化 2026.8.28 12：40更新）</title>
+    <title>抽抽乐订单数据分析（待优化 2026.8.28 12：20更新）</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <style>
@@ -110,7 +110,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>📊 抽抽乐订单数据分析（待优化2026.8.28 12：40更新）</h1>
+            <h1>📊 抽抽乐订单数据分析（待优化2026.8.28 14：20更新）</h1>
             <p>上传Excel文件，自动生成数据分析报告</p>
         </div>
 
@@ -163,7 +163,6 @@
                     <div>
                         <span style="font-size:12px;color:#999;margin-right:10px;">绿色=通过，橙色=未找到用户，黄色=需人工处理（不通过与需人工复核已合并）</span>
                         <button class="btn btn-sm" onclick="exportSuikaResult()">📥 导出审核结果Excel</button>
-                        <button class="btn btn-sm" onclick="exportLaibaoOnly()">📥 导出来豹接龙查询表</button>
                         <button class="btn btn-sm" onclick="exportSuikaNotFound()">📥 导出未匹配用户清单</button>
                     </div>
                 </div>
@@ -222,6 +221,9 @@
                     <div>
                         <button class="btn btn-sm" onclick="exportJizanResult()">📥 导出集赞导入结果Excel</button>
                         <button class="btn btn-sm" onclick="exportLaibaoOnly()">📥 导出来豹接龙查询表</button>
+                        <label style="font-size:12px;color:#555;display:inline-flex;align-items:center;gap:4px;cursor:pointer;user-select:none;margin:0 6px;">
+                            <input type="checkbox" id="laibaoIncludeSuikaCb" checked style="accent-color:#20517d;"> 来豹表含碎卡审核结果
+                        </label>
                         <button class="btn btn-sm" onclick="exportJizanCoreSheet()">📥 导出集赞核心信息查询表</button>
                     </div>
                 </div>
@@ -2063,6 +2065,12 @@
             const ws = exportLaibaoSheet();
             ws['!cols'] = [{ wch: 22 }, { wch: 24 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 14 }];
             XLSX.utils.book_append_sheet(wb, ws, '来豹接龙查询表');
+            // 按钮开关：是否并入碎卡审核结果（默认开启）
+            const includeSuikaCb = document.getElementById('laibaoIncludeSuikaCb');
+            const includeSuika = includeSuikaCb ? includeSuikaCb.checked : true;
+            if (includeSuika && suikaSubmissions && suikaSubmissions.length > 0) {
+                buildSuikaResultSheets(wb);
+            }
             XLSX.writeFile(wb, getTimestampFilename('来豹接龙查询表'));
         }
 
@@ -3335,6 +3343,47 @@
             XLSX.writeFile(wb, getTimestampFilename('碎卡兑换审核结果'));
         }
 
+        // 构建碎卡审核结果 sheets（供来豹接龙查询表导出按开关并入，与「导出审核结果Excel」同源同列）
+        function buildSuikaResultSheets(wb) {
+            const rows = buildSuikaRequestRows();
+            const byStatus = { '通过': [], '未找到用户': [], '需人工处理': [] };
+            rows.forEach(r => { (byStatus[r.audit.type] || byStatus['需人工处理']).push(r); });
+
+            // 提交级汇总 sheet（整体判定口径）
+            const summaryHeaders = ['提交编号', '昵称', '手机号', '请求数', '换入汇总', '换出汇总', '审核结果', '原因汇总', '提交时间'];
+            const summaryData = suikaSubmissions.map(s => {
+                const status = s.audit.status || (s.audit.pass ? '通过' : '需人工处理');
+                const inStr = s.requests.map(r => r.audit.inCard ? (r.audit.inCard + (r.audit.inQty > 1 ? 'x' + r.audit.inQty : '')) : (r.inCard || '（空）')).join('、');
+                const outStr = s.requests.map(r => r.outCards.map(o => o.card + ((o.qty || 0) > 1 ? 'x' + o.qty : '')).join('、')).join(' ； ');
+                const reasonStr = (s.requests.map((r, ri) => {
+                    if (r.audit.pass) return '';
+                    return (s.requests.length > 1 ? `[请求${ri + 1}] ` : '') + (r.audit.reasons || []).join('；');
+                }).filter(Boolean).join('；'))
+                    || (status === '通过' ? '通过'
+                        : (s.audit.blockedFrom ? `同手机号其他提交需人工处理（${s.audit.blockedFrom}）` : status));
+                return [s.code, s.nickname || '', s.phone || '', s.requests.length, inStr, outStr, status, reasonStr, s.submitTime || ''];
+            });
+
+            const passHeaders = ['提交编号', '昵称', '手机号', '订单号', '兑换类型', '换入卡面', '换出卡明细', '提交时间'];
+            const notFoundHeaders = ['提交编号', '昵称', '原始手机号', '订单号', '请求序号', '换入卡面', '换出卡明细', '疑似原因', '提交时间'];
+            const handleHeaders = ['提交编号', '昵称', '手机号', '订单号', '请求序号', '兑换类型', '换入卡面', '换入张数', '换出卡明细', '换出总张数', '原因明细', '提交时间'];
+
+            const passData = byStatus['通过'].map(r => [r.code, r.nickname, r.phone, r.orderNo, r.audit.type, r.inCard, r.outStr, r.submitTime]);
+            const notFoundData = byStatus['未找到用户'].map(r => [r.code, r.nickname, r.phone, r.orderNo, r.ri, r.inCard, r.outStr, r.audit.reasons.join('；'), r.submitTime]);
+            const handleData = byStatus['需人工处理'].map(r => [r.code, r.nickname, r.phone, r.orderNo, r.ri, r.audit.type, r.inCard, r.inQty, r.outStr, r.totalOut, r.audit.reasons.join('；'), r.submitTime]);
+
+            const mkSheet = (name, headers, data, wideIdx) => {
+                const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
+                ws['!cols'] = headers.map((h, i) => ({ wch: (wideIdx && wideIdx.indexOf(i) >= 0) ? 60 : 16 }));
+                XLSX.utils.book_append_sheet(wb, ws, name);
+            };
+            mkSheet('提交级汇总', summaryHeaders, summaryData, [4, 5, 7]);
+            mkSheet('通过审核', passHeaders, passData, [6]);
+            mkSheet('未找到用户', notFoundHeaders, notFoundData, [6, 7]);
+            mkSheet('需人工处理', handleHeaders, handleData, [8, 10]);
+            mkSheet('碎卡兑换获得卡汇总', ['卡面编号', '稀有度', '获得张数', '占比'], buildSuikaGainSummary());
+        }
+
         // 导出未匹配用户清单（独立按钮，即"未找到用户"Sheet）
         function exportSuikaNotFound() {
             if (!suikaSubmissions || suikaSubmissions.length === 0) { alert('请先上传并审核碎卡兑换表'); return; }
@@ -3435,8 +3484,10 @@
                     const phone = String(r[2] || '').trim();
                     const card = String(r[5] || '').trim();
                     const orderNo = String(r[6] || '').trim();
+                    const check = String(r[7] || '').trim();
+                    const note = String(r[8] || '').trim();
                     if (!phone && !orderNo) continue;
-                    result.fail.push({ phone, card, orderNo });
+                    result.fail.push({ phone, card, orderNo, check, note });
                 }
             }
             if (!snPass && !snRepeat && !snFail) {
@@ -3460,14 +3511,26 @@
                     summary[key].total++;
                     const giftValue = giftValueFn(item);
                     if (u) {
-                        summary[key].ok++;
                         const ambiguous = !!matched.ambiguous;
-                        if (ambiguous) summary[key].ambiguous = (summary[key].ambiguous || 0) + 1;
+                        const missingInfo = !String(item.orderNo || '').trim() || !String(item.card || '').trim();
+                        if (!ambiguous && !missingInfo) {
+                            summary[key].ok++;
+                        } else {
+                            summary[key].ambiguous = (summary[key].ambiguous || 0) + 1;
+                        }
                         u.xuanchuanGift = giftValue;
-                        jizanExportData.push({ sheet: key, phone: item.phone, orderNo: item.orderNo, card: item.card || '', matched: true, ambiguous, wechat: u.wechat, matchedKey: matched.matchedKey || '' });
+                        let accounts = [];
+                        if (ambiguous) {
+                            const cp = String(item.phone || '').trim();
+                            accounts = userData.filter(x => {
+                                const p = normalizePhone(x.phone);
+                                return p && cp && (p === cp || (p.length >= 6 && (p.includes(cp) || cp.includes(p))));
+                            }).map(x => x.wechat).filter(Boolean);
+                        }
+                        jizanExportData.push({ sheet: key, phone: item.phone, orderNo: item.orderNo, card: item.card || '', gift: giftValue, note: item.note || '', check: item.check || '', matched: true, ambiguous, missingInfo, accounts, wechat: u.wechat, matchedKey: matched.matchedKey || '' });
                     } else {
                         summary[key].fail.push({ phone: item.phone, orderNo: item.orderNo, card: item.card || '' });
-                        jizanExportData.push({ sheet: key, phone: item.phone, orderNo: item.orderNo, card: item.card || '', matched: false, ambiguous: false, wechat: '', matchedKey: '' });
+                        jizanExportData.push({ sheet: key, phone: item.phone, orderNo: item.orderNo, card: item.card || '', gift: giftValue, note: item.note || '', check: item.check || '', matched: false, ambiguous: false, missingInfo: false, accounts: [], wechat: '', matchedKey: '' });
                     }
                 });
             };
@@ -3485,14 +3548,14 @@
         function renderJizanSummary(summary) {
             const sheetNames = { pass: '审核通过', repeat: '审核通过但是重复填问卷', fail: '审核不通过' };
             const sheetGift = { pass: '填入卡面编号', repeat: '卡面编号+？待核实', fail: '异常，请联系客服' };
-            const ambiguousRows = (jizanExportData || []).filter(e => e.ambiguous);
+            const ambiguousRows = (jizanExportData || []).filter(e => (e.ambiguous || e.missingInfo) && e.sheet !== 'fail');
             document.getElementById('jizanSummary').innerHTML = `
                 <table>
                     <thead><tr><th>Sheet</th><th>总条数</th><th>匹配成功</th><th>需人工确认</th><th>匹配失败</th><th>宣传集赞礼状态</th></tr></thead>
                     <tbody>
                         <tr><td>${sheetNames.pass}</td><td>${summary.pass.total}</td><td style="color:#059669;">${summary.pass.ok}</td><td style="color:#d97706;">${summary.pass.ambiguous || 0}</td><td style="color:#ef4444;">${summary.pass.fail.length}</td><td>${sheetGift.pass}</td></tr>
                         <tr><td>${sheetNames.repeat}</td><td>${summary.repeat.total}</td><td style="color:#059669;">${summary.repeat.ok}</td><td style="color:#d97706;">${summary.repeat.ambiguous || 0}</td><td style="color:#ef4444;">${summary.repeat.fail.length}</td><td>${sheetGift.repeat}</td></tr>
-                        <tr><td>${sheetNames.fail}</td><td>${summary.fail.total}</td><td style="color:#059669;">${summary.fail.ok}</td><td style="color:#d97706;">${summary.fail.ambiguous || 0}</td><td style="color:#ef4444;">${summary.fail.fail.length}</td><td>${sheetGift.fail}</td></tr>
+                        <tr><td>${sheetNames.fail}</td><td>${summary.fail.total}</td><td style="color:#ef4444;" colspan="3">异常，请联系客服</td><td>${sheetGift.fail}</td></tr>
                     </tbody>
                 </table>`;
 
@@ -3508,13 +3571,13 @@
             const ambBody = document.getElementById('jizanAmbBody');
             if (ambBody) {
                 ambBody.innerHTML = ambiguousRows.length > 0
-                    ? ambiguousRows.map(e => `<tr><td>${sheetNames[e.sheet] || e.sheet}</td><td>${e.phone}</td><td>${e.orderNo}</td><td>${e.card}</td><td>${e.wechat}</td><td>同手机号多账号，未能按订单号区分</td></tr>`).join('')
+                    ? ambiguousRows.map(e => `<tr><td>${sheetNames[e.sheet] || e.sheet}</td><td>${e.phone}</td><td>${e.orderNo}</td><td>${e.card}</td><td>${e.wechat}</td><td>${e.ambiguous ? (e.accounts && e.accounts.length > 1 ? '同号多账号：' + e.accounts.slice(0, 3).join('/') + (e.accounts.length > 3 ? '等' + e.accounts.length + '个' : '') : '同号多账号，订单号未命中') : ''}${e.missingInfo ? (e.ambiguous ? '；' : '') + '未填写订单号/卡面编号' : ''}</td></tr>`).join('')
                     : '<tr><td colspan="6" style="text-align:center;color:#999;">无待人工确认项</td></tr>';
             }
 
             let msg = `集赞导入完成：\n审核通过 Sheet：匹配成功 ${summary.pass.ok} / 共 ${summary.pass.total}\n重复填问卷 Sheet：匹配成功 ${summary.repeat.ok} / 共 ${summary.repeat.total}\n审核不通过 Sheet：匹配成功 ${summary.fail.ok} / 共 ${summary.fail.total}`;
             if (ambiguousRows.length > 0) {
-                msg += `\n\n⚠ 需人工确认 ${ambiguousRows.length} 条（同手机号多账号，未能按订单号区分）：\n` + ambiguousRows.slice(0, 30).map(e => `${sheetNames[e.sheet] || e.sheet}：${e.phone}（${e.card}）→ ${e.wechat}`).join('\n');
+                msg += `\n\n⚠ 需人工确认 ${ambiguousRows.length} 条：\n` + ambiguousRows.slice(0, 30).map(e => `${sheetNames[e.sheet] || e.sheet}：${e.phone}（${e.card || '无卡面'}）→ ${e.wechat}${e.ambiguous ? '【同号多账号】' : ''}${e.missingInfo ? '【缺订单号/卡面】' : ''}`).join('\n');
                 if (ambiguousRows.length > 30) msg += `\n...等共 ${ambiguousRows.length} 条`;
             }
             if (failRows.length > 0) {
@@ -3532,10 +3595,27 @@
             const ws1 = XLSX.utils.aoa_to_sheet([h1, ...d1]);
             ws1['!cols'] = [{ wch: 24 }, { wch: 16 }, { wch: 20 }];
             XLSX.utils.book_append_sheet(wb, ws1, '宣传集赞礼全量');
-            const h2 = ['来源Sheet', '手机号', '订单号', '卡面编号', '匹配状态', '匹配用户', '备注'];
-            const d2 = jizanExportData.map(e => [e.sheet, e.phone, e.orderNo, e.card, e.matched ? (e.ambiguous ? '需人工确认' : '成功') : '失败', e.wechat, e.ambiguous ? '同手机号多账号，未能按订单号区分，请人工确认归属账号' : '']);
+            const h2 = ['来源Sheet', '手机号', '订单号', '卡面编号', '处理状态', '匹配用户', '宣传集赞礼', '备注'];
+            const d2 = jizanExportData.map(e => {
+                let status = '失败';
+                let remark = '';
+                if (e.sheet === 'fail') status = '异常，请联系客服';
+                else if (e.matched && !e.ambiguous && !e.missingInfo) status = '成功';
+                else if (e.matched) status = '需人工确认，请联系客服';
+                if (e.ambiguous) {
+                    remark = e.accounts && e.accounts.length > 1
+                        ? '⚠ 同号多账号(' + e.accounts.slice(0, 3).join('/') + (e.accounts.length > 3 ? '等' + e.accounts.length + '个' : '') + ')，订单号未命中，请人工确认归属账号'
+                        : '⚠ 同号多账号，订单号未命中，请人工确认归属账号';
+                }
+                if (e.missingInfo) remark = (remark ? remark + '；' : '') + '未填写订单号/卡面编号，请人工核实';
+                if (e.sheet === 'fail' && (e.note || e.check)) remark = (remark ? remark + '；' : '') + '核查=' + (e.check || '-') + (e.note ? '，' + e.note : '');
+                // 实际成功导入的记录只显示卡面编号（去掉"？待核实"后缀）；仅真正待核实的行保留原样
+                let giftDisp = e.gift || '';
+                if (status === '成功') giftDisp = String(giftDisp).replace(/([？?]待核实)\s*$/, '');
+                return [e.sheet, e.phone, e.orderNo, e.card, status, e.wechat, giftDisp, remark];
+            });
             const ws2 = XLSX.utils.aoa_to_sheet([h2, ...d2]);
-            ws2['!cols'] = [{ wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 12 }, { wch: 12 }, { wch: 24 }, { wch: 36 }];
+            ws2['!cols'] = [{ wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 12 }, { wch: 16 }, { wch: 24 }, { wch: 18 }, { wch: 42 }];
             XLSX.utils.book_append_sheet(wb, ws2, '导入结果汇总');
             const h3 = ['卡面编号', '稀有度', '数量', '其中待核实', '占比'];
             const d3 = buildJizanGiftSummary();
