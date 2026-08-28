@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>抽抽乐订单数据分析（待优化 2026.8.26 23：50更新）</title>
+    <title>抽抽乐订单数据分析（待优化 2026.8.28 12：40更新）</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <style>
@@ -110,7 +110,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>📊 抽抽乐订单数据分析（待优化2026.8.26 23：50更新）</h1>
+            <h1>📊 抽抽乐订单数据分析（待优化2026.8.28 12：40更新）</h1>
             <p>上传Excel文件，自动生成数据分析报告</p>
         </div>
 
@@ -163,6 +163,7 @@
                     <div>
                         <span style="font-size:12px;color:#999;margin-right:10px;">绿色=通过，橙色=未找到用户，黄色=需人工处理（不通过与需人工复核已合并）</span>
                         <button class="btn btn-sm" onclick="exportSuikaResult()">📥 导出审核结果Excel</button>
+                        <button class="btn btn-sm" onclick="exportLaibaoOnly()">📥 导出来豹接龙查询表</button>
                         <button class="btn btn-sm" onclick="exportSuikaNotFound()">📥 导出未匹配用户清单</button>
                     </div>
                 </div>
@@ -234,6 +235,17 @@
                     <table id="jizanFailTable">
                         <thead><tr><th>来源Sheet</th><th>手机号/订单号</th><th>卡面编号</th><th>说明</th></tr></thead>
                         <tbody id="jizanFailBody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="table-section">
+                <div class="table-header">
+                    <h3>⚠️ 需人工确认列表（同手机号多账号）</h3>
+                </div>
+                <div class="table-wrapper">
+                    <table id="jizanAmbTable">
+                        <thead><tr><th>来源Sheet</th><th>手机号</th><th>订单号</th><th>卡面编号</th><th>已匹配账号</th><th>说明</th></tr></thead>
+                        <tbody id="jizanAmbBody"></tbody>
                     </table>
                 </div>
             </div>
@@ -1199,10 +1211,11 @@
                 }
 
                 // 周末小卡（二选一：随机1张 或 不重复2张）
+                // 注意：高抽数玩家条件用数字"2张/1张"，普通玩家条件用中文"两张/一张"，两种都要兼容
                 let weekendRandomCount = 0, weekendUniqueCount = 0;
-                if (weekendCondition.includes('得2张') || weekendCondition.includes('赠2张')) {
+                if (weekendCondition.includes('得2张') || weekendCondition.includes('赠2张') || weekendCondition.includes('得两张') || weekendCondition.includes('赠两张')) {
                     weekendUniqueCount = 2;  // 不重复2张
-                } else if (weekendCondition.includes('得1张') || weekendCondition.includes('赠1张')) {
+                } else if (weekendCondition.includes('得1张') || weekendCondition.includes('赠1张') || weekendCondition.includes('得一张') || weekendCondition.includes('赠一张')) {
                     weekendRandomCount = 1;  // 随机1张
                 }
 
@@ -1226,6 +1239,7 @@
                     finalDraws: user.finalDraws, finalEffectiveDraws, finalJingtouqian, finalZhouzheng, finalKaitui, finalSetCount, finalCondition,
                     xuanchuanGift: '无', // 宣传集赞礼，默认值，待统计后填入卡片编号
                     buyouCount: user.buyouCount || 0, buyouOrders: user.buyouOrders || [],
+                    orderDraws: user.orderDraws || [], // 订单明细（合并展示时按账号回溯）
                     cardsBefore10: cardsBefore10.join(';'), cardList: sortCards(uniqueCards.join(';'))
                 });
             });
@@ -1398,33 +1412,7 @@
             const milestones = [10, 20, 30, 40, 50, 66, 88, 100, 120, 150, 180, 200, 240];
             milestoneStats = milestones.map(m => ({ milestone: m, count: userData.filter(u => u.totalDraws >= m).length, rate: ((userData.filter(u => u.totalDraws >= m).length / userData.length) * 100).toFixed(1) + '%' }));
 
-            // 个人满抽礼计算（函数式，支持累计数量）
-            function calcMilestoneRewards(totalDraws, isDuanhe) {
-                const rewards = [];
-                // 固定里程碑（数量固定）
-                if (totalDraws >= 10) rewards.push('等比例长大小卡×1');
-                if (totalDraws >= 20) rewards.push('陆西骁卡通贴纸');
-                if (totalDraws >= 40) rewards.push('白瓷工艺小卡');
-                if (totalDraws >= 50) rewards.push('烫色签名拍立得');
-                if (totalDraws >= 66) rewards.push('陆西骁淋浴反转胶片');
-                if (totalDraws >= 88) rewards.push('亚克力A5卡册');
-                // 累计型：光栅小卡，每30抽1张，最多6张
-                const guangtsCount = Math.min(Math.floor(totalDraws / 30), 6);
-                if (guangtsCount > 0) rewards.push('光栅小卡×' + guangtsCount);
-                // mini PB：100抽1份，200抽2份（复数），最多2份
-                if (totalDraws >= 200) rewards.push('mini PB 2（复数）');
-                else if (totalDraws >= 100) rewards.push('mini PB 1');
-                // 陆西骁金属徽章：120抽1枚，240抽2枚
-                if (totalDraws >= 240) rewards.push('陆西骁金属徽章×2');
-                else if (totalDraws >= 120) rewards.push('陆西骁金属徽章×1');
-                
-                // 端盒额外：SET + 独享白瓷
-                if (isDuanhe) {
-                    rewards.push('"唯你的长夏永不凋落"SET');
-                    rewards.push('端盒独享白瓷工艺小卡×1');
-                }
-                return rewards.join(' + ');
-            }
+            // 个人满抽礼计算见全局函数 calcMilestoneRewards（在 script 末尾合并函数群附近定义）
             
             userData.forEach(u => {
                 u.isDuanhe = userMap.get(u.wechat)?.orderDraws?.some(o => o.isDuanhe) ? '是' : '否';
@@ -1772,9 +1760,13 @@
                     }
                 }
                 
+                const wechatCellHtml = user._isMerged
+                    ? `<div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;"><span style="font-weight:bold;">${user.wechat || ''}</span><span style="display:inline-block;background:#eef2ff;color:#4f46e5;padding:1px 8px;border-radius:10px;font-size:11px;" title="已按手机号聚合 ${(user.mergedFrom || []).join('、')}">已合并${(user.mergedFrom || []).length}个账号</span></div><div style="font-size:11px;color:#818cf8;margin-top:2px;" title="来源账号">${(user.mergedFrom || []).join('、')}</div>`
+                    : `${user.wechat || ''}`;
+
                 return `
                 <tr>
-                    <td>${user.wechat || ''}</td>
+                    <td>${wechatCellHtml}</td>
                     <td>${user.phone || ''}</td>
                     <td>${user.orderCount || 0}</td>
                     <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${user.orderNos || ''}">
@@ -1824,7 +1816,12 @@
         }
 
         function doSearch() {
-            const keyword = document.getElementById('searchInput').value.toLowerCase().trim();
+            const rawKeyword = document.getElementById('searchInput').value.trim();
+            const keyword = rawKeyword.toLowerCase();
+            const detailPanel = document.getElementById('userDetailPanel');
+
+            // 主表展示保持每账号一行，不做同手机号合并（避免同号多账号数据混淆）；导出表备注列已提示关联账号
+
             if (keyword) {
                 filteredData = userData.filter(u => {
                     const wechatMatch = u.wechat && String(u.wechat).toLowerCase().includes(keyword);
@@ -1836,7 +1833,6 @@
                 filteredData = [...userData];
             }
             // 详情面板/搜索弹窗：命中单个用户时展示详情卡片；命中多个时提示数量与操作指引
-            const detailPanel = document.getElementById('userDetailPanel');
             if (keyword && filteredData.length === 1) {
                 renderUserDetail(filteredData[0]);
                 detailPanel.classList.remove('hidden');
@@ -1891,7 +1887,7 @@
                     }
                 }
                 return [
-                    u.wechat || '', u.phone || '', u.orderCount || 0, u.orderNos || '', u.items || '',
+                    (u._isMerged && u.mergedFrom ? u.mergedFrom.join('；') : (u.wechat || '')), u.phone || '', u.orderCount || 0, u.orderNos || '', u.items || '',
                     u.totalDraws || 0, u.isDuanhe || '否', u.milestoneRewards || '',
                     u.allMemberBonus || '', u.specialBonus || '', u.xuanchuanGift || '无',
                     buyouStr,
@@ -1968,8 +1964,18 @@
         }
 
         function exportLaibaoSheet() {
+            // 同手机号多账号映射（基于全量 userData）：备注提示“数据分散，请合并查看”
+            const phoneToAccounts = {};
+            userData.forEach(u => {
+                const p = normalizePhone(String(u.phone || '').trim());
+                if (!p) return;
+                const acct = String(u.wechat || '').trim();
+                if (!acct) return;
+                if (!phoneToAccounts[p]) phoneToAccounts[p] = [];
+                if (phoneToAccounts[p].indexOf(acct) < 0) phoneToAccounts[p].push(acct);
+            });
             const headers = ['查询码(下单账号)', '下单账号', '收货人手机号', '总抽数', '是否端盒', '超like卡', '全员特典', '宣传集赞礼', '补邮情况', '限时小卡获得', '浪漫疯子获得', '周末活动获得', '终极活动获得', '获得卡片', '个人满抽礼', '备注'];
-            const data = filteredData.map(u => {
+            const data = userData.map(u => {
                 // 补邮情况描述：无需补邮 / 已补邮 / 未补邮
                 // 规则：满10抽无需补邮，少于10抽才需要补邮
                 let buyouStr = '无需补邮';
@@ -2004,9 +2010,10 @@
                 
                 // 备注：检测海外用户（下单账号或手机号为非11位国内手机号格式）
                 let remark = '';
-                const wechat = String(u.wechat || '').trim();
+                const mergedAcct = u._isMerged && u.mergedFrom ? u.mergedFrom.join('；') : '';
+                const wechat = mergedAcct || String(u.wechat || '').trim();
                 const phone = String(u.phone || '').trim();
-                const isOverseasAccount = wechat && !(wechat.length === 11 && wechat.startsWith('1') && /^\d+$/.test(wechat));
+                const isOverseasAccount = !mergedAcct && wechat && !(wechat.length === 11 && wechat.startsWith('1') && /^\d+$/.test(wechat));
                 const isOverseasPhone = phone && !(phone.length === 11 && phone.startsWith('1') && /^\d+$/.test(phone));
                 if (isOverseasAccount || isOverseasPhone) {
                     if (isOverseasAccount && isOverseasPhone) {
@@ -2017,10 +2024,19 @@
                         remark = '⚠ 海外手机号';
                     }
                 }
+                // 同手机号多账号提示（数据分散，请合并查看）
+                const phoneKey = normalizePhone(phone);
+                const phoneAccts = phoneKey ? (phoneToAccounts[phoneKey] || []) : [];
+                if (phoneAccts.length > 1) {
+                    const others = phoneAccts.filter(a => a !== wechat);
+                    if (others.length > 0) {
+                        remark += (remark ? '；' : '') + `⚠ 同手机号多账号：${others.join('；')}（数据分散，请合并查看）`;
+                    }
+                }
                 
                 return [
-                    u.wechat || '',      // 查询码（下单账号）
-                    u.wechat || '',      // 下单账号
+                    wechat,      // 查询码（下单账号）
+                    wechat,      // 下单账号
                     u.phone || '',       // 收货人手机号
                     u.totalDraws || 0,
                     u.isDuanhe || '否',
@@ -2195,8 +2211,89 @@
             return s;
         }
 
+        // 个人满抽礼计算（函数式，支持累计数量）——全局定义，主表合并后按总抽数重算
+        function calcMilestoneRewards(totalDraws, isDuanhe) {
+            const rewards = [];
+            // 固定里程碑（数量固定）
+            if (totalDraws >= 10) rewards.push('等比例长大小卡×1');
+            if (totalDraws >= 20) rewards.push('陆西骁卡通贴纸');
+            if (totalDraws >= 40) rewards.push('白瓷工艺小卡');
+            if (totalDraws >= 50) rewards.push('烫色签名拍立得');
+            if (totalDraws >= 66) rewards.push('陆西骁淋浴反转胶片');
+            if (totalDraws >= 88) rewards.push('亚克力A5卡册');
+            // 累计型：光栅小卡，每30抽1张，最多6张
+            const guangtsCount = Math.min(Math.floor(totalDraws / 30), 6);
+            if (guangtsCount > 0) rewards.push('光栅小卡×' + guangtsCount);
+            // mini PB：100抽1份，200抽2份（复数），最多2份
+            if (totalDraws >= 200) rewards.push('mini PB 2（复数）');
+            else if (totalDraws >= 100) rewards.push('mini PB 1');
+            // 陆西骁金属徽章：120抽1枚，240抽2枚
+            if (totalDraws >= 240) rewards.push('陆西骁金属徽章×2');
+            else if (totalDraws >= 120) rewards.push('陆西骁金属徽章×1');
+
+            // 端盒额外：SET + 独享白瓷
+            if (isDuanhe) {
+                rewards.push('"唯你的长夏永不凋落"SET');
+                rewards.push('端盒独享白瓷工艺小卡×1');
+            }
+            return rewards.join(' + ');
+        }
+
+        // 合并多个账号的卡面列表（cardList 形如 "R1; R2; SR3x2"），按稀有度+编号排序后返回
+        function mergeCardLists(cardLists) {
+            const counts = {};
+            (cardLists || []).forEach(cl => {
+                String(cl || '').split(';').map(s => s.trim()).filter(Boolean).forEach(part => {
+                    const p = parseCardItem(part);
+                    if (!p || !p.name) return;
+                    counts[p.name] = (counts[p.name] || 0) + (p.qty || 1);
+                });
+            });
+            const parts = Object.keys(counts).map(k => counts[k] > 1 ? k + 'x' + counts[k] : k);
+            return parts.length > 0 ? sortCards(parts.join(';')) : '';
+        }
+
+        // 取最早的时间字符串（YYYY-MM-DD HH:mm:ss 直接字符串比较）
+        function minTimeStr(a, b) {
+            if (!a) return b || '';
+            if (!b) return a;
+            return a < b ? a : b;
+        }
+
+        // 合并活动获得条件：取非"未达标"的去重值；若全部未达标则返回"未达标"
+        function mergeConditions(list) {
+            const vals = (list || []).filter(v => { const s = String(v || '').trim(); return s && !s.includes('未达标') && s !== '-'; });
+            const uniq = Array.from(new Set(vals));
+            if (uniq.length > 0) return uniq.join('；');
+            return (list || []).some(v => String(v || '').includes('未达标')) ? '未达标' : '';
+        }
+
+        // 合并宣传集赞礼：多个账号的礼去重拼接；含"异常"时优先展示异常；否则"无"
+        function mergeGiftValues(list) {
+            const vals = (list || []).filter(v => { const s = String(v || '').trim(); return s && s !== '无' && s !== '异常，请联系客服'; });
+            const uniq = Array.from(new Set(vals));
+            if (uniq.length > 0) return uniq.join('；');
+            if ((list || []).some(v => String(v || '').trim() === '异常，请联系客服')) return '异常，请联系客服';
+            return '无';
+        }
+
+        // 合并限时小卡获得情况文本（与 processData 中 limitedCards 口径一致）
+        function mergeLimitedCardsText(users) {
+            const n1 = users.reduce((s, u) => s + (u.limited1Count || 0), 0);
+            const n2 = users.reduce((s, u) => s + (u.limited2Count || 0), 0);
+            const n3 = users.reduce((s, u) => s + (u.limited3Count || 0), 0);
+            if (n1 + n2 + n3 > 0) {
+                const parts = [];
+                if (n1 > 0) parts.push('限时1×' + n1);
+                if (n2 > 0) parts.push('限时2×' + n2);
+                if (n3 > 0) parts.push('限时3×' + n3);
+                return parts.join('、');
+            }
+            return users.some(u => String(u.limitedCards || '').includes('未满10抽')) ? '未满10抽' : '无';
+        }
+
         // 按手机号聚合多个下单账号（userData 按 wechat 分组，同手机号可能对应多个账号）
-        // 仅用于审核匹配口径；详情展示/导出仍使用原始 user 数据，保持原样
+        // 供碎卡审核匹配与主表手机号合并展示共用；合并对象携带完整统计字段与 _isMerged 标记
         function mergeUsersByPhone(users) {
             const base = users[0];
             const totalDraws = users.reduce((s, u) => s + (u.totalDraws || 0), 0);
@@ -2212,15 +2309,64 @@
                 (u.buyouOrders || []).forEach(b => buyouOrders.push(Object.assign({}, b, { _owner: u.wechat })));
             });
             const itemsParts = users.map(u => u.items || '').filter(Boolean);
-            return Object.assign({}, base, {
-                totalDraws: totalDraws,
-                mergedFrom: users.map(u => u.wechat),
+            const isDuanhe = users.some(u => u.isDuanhe === '是') ? '是' : '否';
+            const merged = Object.assign({}, base, {
+                // 基础聚合
+                orderCount: users.reduce((s, u) => s + (u.orderCount || 0), 0),
+                orderNos: users.map(u => u.orderNos || '').filter(Boolean).join(';'),
                 orderDraws: orderDraws,
                 buyouOrders: buyouOrders,
+                totalDraws: totalDraws,
                 items: itemsParts.join('；'),
+                cardList: mergeCardLists(users.map(u => u.cardList)),
+                // 时间（取最早）
+                firstPayTime: users.reduce((m, u) => minTimeStr(m, u.firstPayTime || ''), ''),
+                full10Time: users.reduce((m, u) => minTimeStr(m, u.full10Time || ''), ''),
+                // 活动统计（求和）
+                activity0_1h: users.reduce((s, u) => s + (u.activity0_1h || 0), 0),
+                activity1_6h: users.reduce((s, u) => s + (u.activity1_6h || 0), 0),
+                activity6_24h: users.reduce((s, u) => s + (u.activity6_24h || 0), 0),
+                // 限时小卡
+                limitedCards: mergeLimitedCardsText(users),
+                limited1Count: users.reduce((s, u) => s + (u.limited1Count || 0), 0),
+                limited2Count: users.reduce((s, u) => s + (u.limited2Count || 0), 0),
+                limited3Count: users.reduce((s, u) => s + (u.limited3Count || 0), 0),
+                // 浪漫疯子
+                romanceDraws: users.reduce((s, u) => s + (u.romanceDraws || 0), 0),
+                romanceCardCount: users.reduce((s, u) => s + (u.romanceCardCount || 0), 0),
+                romanceCondition: mergeConditions(users.map(u => u.romanceCondition)),
+                romanceRandomCount: users.reduce((s, u) => s + (u.romanceRandomCount || 0), 0),
+                romanceUniqueCount: users.reduce((s, u) => s + (u.romanceUniqueCount || 0), 0),
+                // 周末活动
+                weekendDraws: users.reduce((s, u) => s + (u.weekendDraws || 0), 0),
+                weekendCardCount: users.reduce((s, u) => s + (u.weekendCardCount || 0), 0),
+                weekendCondition: mergeConditions(users.map(u => u.weekendCondition)),
+                weekendRandomCount: users.reduce((s, u) => s + (u.weekendRandomCount || 0), 0),
+                weekendUniqueCount: users.reduce((s, u) => s + (u.weekendUniqueCount || 0), 0),
+                // 终极活动
+                finalDraws: users.reduce((s, u) => s + (u.finalDraws || 0), 0),
+                finalEffectiveDraws: users.reduce((s, u) => s + (u.finalEffectiveDraws || 0), 0),
+                finalJingtouqian: users.reduce((s, u) => s + (u.finalJingtouqian || 0), 0),
+                finalZhouzheng: users.reduce((s, u) => s + (u.finalZhouzheng || 0), 0),
+                finalKaitui: users.reduce((s, u) => s + (u.finalKaitui || 0), 0),
+                finalSetCount: users.reduce((s, u) => s + (u.finalSetCount || 0), 0),
+                finalCondition: mergeConditions(users.map(u => u.finalCondition)),
+                // 补邮 / 集赞礼 / 资格标记
+                buyouCount: users.reduce((s, u) => s + (u.buyouCount || 0), 0),
+                xuanchuanGift: mergeGiftValues(users.map(u => u.xuanchuanGift)),
+                isDuanhe: isDuanhe,
+                isFirstTimeBuyer: users.some(u => u.isFirstTimeBuyer === '是') ? '是' : '否',
+                milestoneRewards: calcMilestoneRewards(totalDraws, isDuanhe === '是'),
+                cardsBefore10: users.map(u => u.cardsBefore10 || '').filter(Boolean).join(';'),
+                // 合并标记
+                mergedFrom: users.map(u => u.wechat),
                 _mergedCounts: mergedCounts,
                 _isMerged: true
             });
+            // 全员特典/特典卡为全活动统一发放，继承首个账号即可
+            merged.allMemberBonus = base.allMemberBonus || '';
+            merged.specialBonus = base.specialBonus || '';
+            return merged;
         }
 
         // 获取同手机号全部账号的聚合卡面计数（审核核对用）；未命中返回 null
@@ -2243,6 +2389,7 @@
         function findUserByPhoneOrderDetail(phone, orderNo, nickname, name, opts) {
             const triedKeys = [];
             opts = opts || {};
+            const cleanOrder = String(orderNo || '').trim();
             const cleanPhone = normalizePhone(phone);
             if (cleanPhone && cleanPhone.length >= 6) {
                 triedKeys.push('手机号');
@@ -2254,13 +2401,24 @@
                     });
                 }
                 if (matches.length > 0) {
+                    // 同手机号多账号时，优先用订单号在命中集合内锁定具体账号，避免全部落到第一个账号
+                    if (matches.length > 1 && cleanOrder) {
+                        const byOrder = matches.find(x => {
+                            const nos = String(x.orderNos || '').split(';').map(s => s.trim()).filter(Boolean);
+                            return nos.includes(cleanOrder) || (cleanOrder.length >= 6 && nos.some(n => n.length >= 6 && cleanOrder.includes(n)));
+                        });
+                        if (byOrder) return { user: byOrder, matchedKey: '手机号+订单号', triedKeys };
+                    }
                     if (opts.mergeByPhone && matches.length > 1) {
                         return { user: mergeUsersByPhone(matches), matchedKey: '手机号(聚合' + matches.length + '账号)', triedKeys };
+                    }
+                    if (matches.length > 1) {
+                        // 同手机号多账号且无法用订单号区分：返回首个并标记待人工确认，避免误判为完全成功
+                        return { user: matches[0], matchedKey: '手机号(同号多账号)', triedKeys, ambiguous: true };
                     }
                     return { user: matches[0], matchedKey: '手机号', triedKeys };
                 }
             }
-            const cleanOrder = String(orderNo || '').trim();
             if (cleanOrder) {
                 triedKeys.push('订单号');
                 const u3 = userData.find(x => {
@@ -2448,10 +2606,13 @@
                     bracketQty = cnNumToInt(bm[1]);
                     cellWork = cellWork.replace(/[（(]\s*([一二两三四五六七八九十]|\d+)\s*张?\s*[）)]/, '').trim();
                 } else {
-                    // 括号内不是纯数量：若为整组卡面列表（如 '（R32、R33、R31、R34、R38、R40）'），剥离括号后继续解析
+                    // 括号内不是纯数量：若为整组卡面列表（如 '（R32、R33、R31、R34、R38、R40）'）或数量说明文字（如 '（各1张）'/'（每张）'/'（一样）'/'（各一）'/'（张数列）'/'（共3张）'），剥离括号后继续解析
                     const bracketContent = (cellWork.match(/[（(]([^（）()]*)[）)]/) || [])[1] || '';
                     if (bracketContent && /^(SSSR|SSR|SR|R|N)\s*\d/i.test(bracketContent)) {
                         cellWork = cellWork.replace(/[（(][^（）()]*[）)]/, bracketContent).trim();
+                    } else if (bracketContent && /各[一二两三四五六七八九十1-9]?张?|每张|一样|各一|张数|共\s*([一二两三四五六七八九十]|\d+)?\s*张/.test(bracketContent)) {
+                        // 括号内为数量说明文字（非卡面列表）：剥离括号继续解析，张数由后续 qty 逻辑判定
+                        cellWork = cellWork.replace(/[（(][^（）()]*[）)]/, '').trim();
                     } else {
                         return { review: true, cards: [{ card: cell, qty: parseQty(qty) }] };
                     }
@@ -2477,6 +2638,7 @@
             if (parts.length === 0) return { review: false, cards: [] };
             const result = [];
             const unmatched = [];
+            let review = false;
             // 内嵌数量：'R2*3'/'R2x3'/'R2×3'/'R2 3张'（需带'张'，避免把'R23'误拆）
             const reCardQty = /^((?:SSSR|SSR|SR|R|N)\s*\d+)\s*[x×*]\s*([一二两三四五六七八九十]|\d+)\s*张?$/i;
             const reCardQty2 = /^((?:SSSR|SSR|SR|R|N)\s*\d+)\s*[（(]?\s*([一二两三四五六七八九十]|\d+)\s*张\s*[）)]?$/i;
@@ -2501,7 +2663,12 @@
                 unmatched.push(p);
             });
             if (unmatched.length > 0) {
-                return { review: true, cards: result.length > 0 ? result : [{ card: cell, qty: parseQty(qty) }] };
+                // 存在无法解析的片段（如'标准卡面列表+多余文字'）：不再直接拦截，
+                // 标记 review=true 但保留已解析出的卡面继续走剩余逻辑，由后续聚合判定决定是否需人工
+                review = true;
+                if (result.length === 0) {
+                    return { review: true, cards: [{ card: cell, qty: parseQty(qty) }] };
+                }
             }
             // qty 列显式配对：'R2 3张'/'3张R2' 出现在 qty 列时按卡面绑定
             const explicit = {};
@@ -2522,7 +2689,6 @@
                 if (o.qty === null && explicit[o.card] !== undefined) o.qty = explicit[o.card];
             });
             // 剩余未配对数量补齐
-            let review = false;
             const missing = result.filter(o => o.qty === null);
             if (missing.length > 0) {
                 const nums = qty.match(/\d+/g) || [];
@@ -2536,6 +2702,11 @@
                     // 张数列空白：多卡面列表默认各 1 张（如 'R32、R33、R31、R34、R38、R40'）
                     // 张数审核仍会按 6×(n) 校验总张数，张数不合规时转需人工处理，不会放行漏填数量
                     missing.forEach(o => { o.qty = 1; });
+                } else if (result.length > 0) {
+                    // 张数列有内容但无法与卡面列表配平（如填了 "1"/"1张"/"6" 等单个数，或中英文标点差异）：
+                    // 卡面列表已完整解析时按各 1 张兜底并软提示，总张数交由聚合校验把关（少填/多填仍会转人工）
+                    missing.forEach(o => { o.qty = 1; });
+                    review = true;
                 } else {
                     review = true;
                 }
@@ -2840,11 +3011,17 @@
                 return { type: '需人工处理', reasons: ['疑似测试数据（换入/换出含“测试”字样），需人工处理'] };
             }
             if (req.review) {
-                // 细分原因：端盒标记 / 括号备注异常 / 复杂格式
-                let why = '换出卡填写格式复杂（未用标点分隔或格式异常），需人工处理';
-                if (/端盒|瑞盒/.test(rawText)) why = '换出含「端盒/瑞盒」标记，需人工处理';
-                else if (/[（(]/.test(String(req.inCard || ''))) why = '换出卡括号备注格式异常（非纯数量备注），需人工处理';
-                return { type: '需人工处理', reasons: [why] };
+                // review 标记仅表示格式存在无法解析/异常片段（非致命）：
+                // 仅当完全无法解析出任何有效卡面时才拦截为需人工处理；
+                // 若能解析出有效卡面则放行进入后续聚合判定，并挂 warning 提示“格式需留意”
+                const validOut = (req.outCards || []).filter(o => normalizeCardId(o.card));
+                if (validOut.length === 0) {
+                    let why = '换出卡填写格式复杂（未用标点分隔或格式异常），需人工处理';
+                    if (/端盒|瑞盒/.test(rawText)) why = '换出含「端盒/瑞盒」标记，需人工处理';
+                    else if (/[（(]/.test(String(req.inCard || ''))) why = '换出卡括号备注格式异常（非纯数量备注），需人工处理';
+                    return { type: '需人工处理', reasons: [why] };
+                }
+                req.warning = '格式需留意';
             }
             if (!normalizeCardId(req.inCard)) {
                 return { type: '需人工处理', reasons: ['换入卡面无法识别：' + (req.inCard || '（空）')] };
@@ -2931,7 +3108,7 @@
                         reasons.push(`换出卡 ${cNorm} 未在该用户订单中抽到（该用户已持有：${ownedBrief}，请核对是否漏统计或格式未识别）`);
                     }
                 } else if (actual < qty) {
-                    reasons.push(`换出卡 ${cNorm} 数量不足（需${qty}张，实际${actual}张）`);
+                    reasons.push(`换出卡${cNorm}数量不足（需${qty}张，实际拥有${actual}张）`);
                 }
             });
 
@@ -2996,7 +3173,9 @@
                 const selfReasons = s.requests.map((r, ri) => reasonStrOf(s, ri)).filter(Boolean);
                 let reasonStr = selfReasons.join('<br>');
                 if (!reasonStr) {
-                    if (status === '通过') reasonStr = '通过';
+                    if (status === '通过') {
+                        reasonStr = s.requests.some(r => r.audit.pass && r.warning) ? '通过（部分请求格式需留意）' : '通过';
+                    }
                     else if (s.audit.blockedFrom) reasonStr = `同手机号其他提交需人工处理（${s.audit.blockedFrom}）`;
                     else reasonStr = status;
                 }
@@ -3020,7 +3199,7 @@
                 const meta = metaOf(st);
                 const user = s.user;
                 const typeStr = r.audit.type || st;
-                const reasonStr = reasonStrOf(s, ri) || st;
+                const reasonStr = (reasonStrOf(s, ri) || st) + ((r.audit.pass && r.warning) ? '（格式需留意）' : '');
                 return `<tr style="background:${meta.bg};">
                     <td>${s.code}</td>
                     <td>${ri + 1}/${s.requests.length}</td>
@@ -3276,16 +3455,19 @@
 
             const processList = (list, key, giftValueFn) => {
                 list.forEach(item => {
-                    const u = findUserByPhoneOrder(item.phone, item.orderNo);
+                    const matched = findUserByPhoneOrderDetail(item.phone, item.orderNo);
+                    const u = matched.user;
                     summary[key].total++;
                     const giftValue = giftValueFn(item);
                     if (u) {
                         summary[key].ok++;
+                        const ambiguous = !!matched.ambiguous;
+                        if (ambiguous) summary[key].ambiguous = (summary[key].ambiguous || 0) + 1;
                         u.xuanchuanGift = giftValue;
-                        jizanExportData.push({ sheet: key, phone: item.phone, orderNo: item.orderNo, card: item.card || '', matched: true, wechat: u.wechat });
+                        jizanExportData.push({ sheet: key, phone: item.phone, orderNo: item.orderNo, card: item.card || '', matched: true, ambiguous, wechat: u.wechat, matchedKey: matched.matchedKey || '' });
                     } else {
                         summary[key].fail.push({ phone: item.phone, orderNo: item.orderNo, card: item.card || '' });
-                        jizanExportData.push({ sheet: key, phone: item.phone, orderNo: item.orderNo, card: item.card || '', matched: false, wechat: '' });
+                        jizanExportData.push({ sheet: key, phone: item.phone, orderNo: item.orderNo, card: item.card || '', matched: false, ambiguous: false, wechat: '', matchedKey: '' });
                     }
                 });
             };
@@ -3303,13 +3485,14 @@
         function renderJizanSummary(summary) {
             const sheetNames = { pass: '审核通过', repeat: '审核通过但是重复填问卷', fail: '审核不通过' };
             const sheetGift = { pass: '填入卡面编号', repeat: '卡面编号+？待核实', fail: '异常，请联系客服' };
+            const ambiguousRows = (jizanExportData || []).filter(e => e.ambiguous);
             document.getElementById('jizanSummary').innerHTML = `
                 <table>
-                    <thead><tr><th>Sheet</th><th>总条数</th><th>匹配成功</th><th>匹配失败</th><th>宣传集赞礼状态</th></tr></thead>
+                    <thead><tr><th>Sheet</th><th>总条数</th><th>匹配成功</th><th>需人工确认</th><th>匹配失败</th><th>宣传集赞礼状态</th></tr></thead>
                     <tbody>
-                        <tr><td>${sheetNames.pass}</td><td>${summary.pass.total}</td><td style="color:#059669;">${summary.pass.ok}</td><td style="color:#ef4444;">${summary.pass.fail.length}</td><td>${sheetGift.pass}</td></tr>
-                        <tr><td>${sheetNames.repeat}</td><td>${summary.repeat.total}</td><td style="color:#059669;">${summary.repeat.ok}</td><td style="color:#ef4444;">${summary.repeat.fail.length}</td><td>${sheetGift.repeat}</td></tr>
-                        <tr><td>${sheetNames.fail}</td><td>${summary.fail.total}</td><td style="color:#059669;">${summary.fail.ok}</td><td style="color:#ef4444;">${summary.fail.fail.length}</td><td>${sheetGift.fail}</td></tr>
+                        <tr><td>${sheetNames.pass}</td><td>${summary.pass.total}</td><td style="color:#059669;">${summary.pass.ok}</td><td style="color:#d97706;">${summary.pass.ambiguous || 0}</td><td style="color:#ef4444;">${summary.pass.fail.length}</td><td>${sheetGift.pass}</td></tr>
+                        <tr><td>${sheetNames.repeat}</td><td>${summary.repeat.total}</td><td style="color:#059669;">${summary.repeat.ok}</td><td style="color:#d97706;">${summary.repeat.ambiguous || 0}</td><td style="color:#ef4444;">${summary.repeat.fail.length}</td><td>${sheetGift.repeat}</td></tr>
+                        <tr><td>${sheetNames.fail}</td><td>${summary.fail.total}</td><td style="color:#059669;">${summary.fail.ok}</td><td style="color:#d97706;">${summary.fail.ambiguous || 0}</td><td style="color:#ef4444;">${summary.fail.fail.length}</td><td>${sheetGift.fail}</td></tr>
                     </tbody>
                 </table>`;
 
@@ -3322,7 +3505,18 @@
                 ? failRows.map(f => `<tr><td>${f.sheet}</td><td>${f.key}</td><td>${f.card}</td><td>未匹配到用户</td></tr>`).join('')
                 : '<tr><td colspan="4" style="text-align:center;color:#999;">无匹配失败</td></tr>';
 
+            const ambBody = document.getElementById('jizanAmbBody');
+            if (ambBody) {
+                ambBody.innerHTML = ambiguousRows.length > 0
+                    ? ambiguousRows.map(e => `<tr><td>${sheetNames[e.sheet] || e.sheet}</td><td>${e.phone}</td><td>${e.orderNo}</td><td>${e.card}</td><td>${e.wechat}</td><td>同手机号多账号，未能按订单号区分</td></tr>`).join('')
+                    : '<tr><td colspan="6" style="text-align:center;color:#999;">无待人工确认项</td></tr>';
+            }
+
             let msg = `集赞导入完成：\n审核通过 Sheet：匹配成功 ${summary.pass.ok} / 共 ${summary.pass.total}\n重复填问卷 Sheet：匹配成功 ${summary.repeat.ok} / 共 ${summary.repeat.total}\n审核不通过 Sheet：匹配成功 ${summary.fail.ok} / 共 ${summary.fail.total}`;
+            if (ambiguousRows.length > 0) {
+                msg += `\n\n⚠ 需人工确认 ${ambiguousRows.length} 条（同手机号多账号，未能按订单号区分）：\n` + ambiguousRows.slice(0, 30).map(e => `${sheetNames[e.sheet] || e.sheet}：${e.phone}（${e.card}）→ ${e.wechat}`).join('\n');
+                if (ambiguousRows.length > 30) msg += `\n...等共 ${ambiguousRows.length} 条`;
+            }
             if (failRows.length > 0) {
                 msg += `\n\n匹配失败 ${failRows.length} 条：\n` + failRows.slice(0, 30).map(f => `${f.sheet}：${f.key}`).join('\n');
                 if (failRows.length > 30) msg += `\n...等共 ${failRows.length} 条`;
@@ -3338,10 +3532,10 @@
             const ws1 = XLSX.utils.aoa_to_sheet([h1, ...d1]);
             ws1['!cols'] = [{ wch: 24 }, { wch: 16 }, { wch: 20 }];
             XLSX.utils.book_append_sheet(wb, ws1, '宣传集赞礼全量');
-            const h2 = ['来源Sheet', '手机号', '订单号', '卡面编号', '匹配状态', '匹配用户'];
-            const d2 = jizanExportData.map(e => [e.sheet, e.phone, e.orderNo, e.card, e.matched ? '成功' : '失败', e.wechat]);
+            const h2 = ['来源Sheet', '手机号', '订单号', '卡面编号', '匹配状态', '匹配用户', '备注'];
+            const d2 = jizanExportData.map(e => [e.sheet, e.phone, e.orderNo, e.card, e.matched ? (e.ambiguous ? '需人工确认' : '成功') : '失败', e.wechat, e.ambiguous ? '同手机号多账号，未能按订单号区分，请人工确认归属账号' : '']);
             const ws2 = XLSX.utils.aoa_to_sheet([h2, ...d2]);
-            ws2['!cols'] = [{ wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 12 }, { wch: 10 }, { wch: 24 }];
+            ws2['!cols'] = [{ wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 12 }, { wch: 12 }, { wch: 24 }, { wch: 36 }];
             XLSX.utils.book_append_sheet(wb, ws2, '导入结果汇总');
             const h3 = ['卡面编号', '稀有度', '数量', '其中待核实', '占比'];
             const d3 = buildJizanGiftSummary();
@@ -3360,40 +3554,67 @@
         // ---------- 用户详情面板 ----------
         function renderUserDetail(user) {
             window.__detailUser = user; // 供订单明细弹窗按钮使用
-            const suikaInfos = suikaAuditMap[user.wechat] || [];
+            const merged = user && user._isMerged;
+            // 碎卡审核状态（合并对象遍历全部来源账号）
+            const auditKeys = merged ? (user.mergedFrom || []) : [user.wechat];
             const suikaMeta = { '通过': '#059669', '未找到用户': '#ea580c', '需人工处理': '#ca8a04' };
-            const suikaHtml = suikaInfos.length > 0
-                ? suikaInfos.map(s => {
+            const suikaLines = [];
+            auditKeys.forEach(k => {
+                (suikaAuditMap[k] || []).forEach(s => {
                     const status = s.audit.status || (s.audit.pass ? '通过' : '需人工处理');
                     const color = suikaMeta[status] || '#ca8a04';
                     const detail = s.requests.map(r => r.audit.type + (r.audit.reasons.length ? '（' + r.audit.reasons.join('；') + '）' : '')).join('；');
-                    return `<div style="font-size:12px;line-height:1.7;color:${color};">【${s.code}】${status}：${detail}</div>`;
-                }).join('')
+                    suikaLines.push(`<div style="font-size:12px;line-height:1.7;color:${color};"><span style="color:#818cf8;">[${k}]</span>【${s.code}】${status}：${detail}</div>`);
+                });
+            });
+            const suikaHtml = suikaLines.length > 0
+                ? suikaLines.join('')
                 : '<div style="color:#999;font-size:12px;">未导入碎卡兑换表或无该用户记录</div>';
 
             const giftHtml = user.xuanchuanGift && user.xuanchuanGift !== '无'
                 ? `<span style="color:#059669;font-weight:bold;">${user.xuanchuanGift}</span>`
                 : '<span style="color:#999;">无</span>';
 
+            const mergedBadge = merged
+                ? `<span style="display:inline-block;background:#eef2ff;color:#4f46e5;padding:2px 10px;border-radius:10px;font-size:12px;margin-left:8px;" title="已按手机号聚合 ${(user.mergedFrom || []).join('、')}">已合并${(user.mergedFrom || []).length}个账号</span>`
+                : '';
+            const mergedHint = merged
+                ? `<div style="font-size:12px;color:#818cf8;margin-top:4px;">来源账号：${(user.mergedFrom || []).join('、')}（以下统计已按手机号自动合并）</div>`
+                : '';
+
+            const weekendGet = ((user.weekendRandomCount > 0 ? '随机×' + user.weekendRandomCount : '') + (user.weekendUniqueCount > 0 ? (user.weekendRandomCount > 0 ? '、' : '') + '不重复×' + user.weekendUniqueCount : ''))
+                || (user.weekendCondition && String(user.weekendCondition).includes('未达标') ? '未达标' : '-');
+            const romanceGet = ((user.romanceRandomCount > 0 ? '随机×' + user.romanceRandomCount : '') + (user.romanceUniqueCount > 0 ? (user.romanceRandomCount > 0 ? '、' : '') + '不重复×' + user.romanceUniqueCount : ''))
+                || (user.romanceCondition && String(user.romanceCondition).includes('未达标') ? '未达标' : '-');
+
             document.getElementById('userDetailPanel').innerHTML = `
                 <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-                    <h3 style="margin:0;color:#20517d;">👤 用户详情</h3>
-                    <span style="font-size:12px;color:#999;">搜索命中单个用户</span>
+                    <h3 style="margin:0;color:#20517d;">👤 用户详情${mergedBadge}</h3>
+                    <span style="font-size:12px;color:#999;">搜索命中单个手机号${merged ? '（多账号已合并）' : ''}</span>
                 </div>
+                ${mergedHint}
                 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-top:12px;">
                     <div><div style="font-size:11px;color:#999;">下单账号</div><div style="font-weight:bold;">${user.wechat || '-'}</div></div>
                     <div><div style="font-size:11px;color:#999;">手机号</div><div style="font-weight:bold;">${user.phone || '-'}</div></div>
                     <div><div style="font-size:11px;color:#999;">订单号</div><div style="font-weight:bold;font-size:12px;word-break:break-all;">${user.orderNos || '-'}</div>
                         <button onclick="window.__detailUser && showOrderModal(window.__detailUser)" style="margin-top:6px;border:1px solid #20517d;background:#fff;color:#20517d;padding:4px 12px;border-radius:8px;font-size:12px;cursor:pointer;">📦 查看订单明细</button></div>
+                    <div><div style="font-size:11px;color:#999;">订单数</div><div style="font-weight:bold;">${user.orderCount || 0}</div></div>
                     <div><div style="font-size:11px;color:#999;">总抽数</div><div style="font-weight:bold;color:#20517d;">${user.totalDraws || 0}</div></div>
+                    <div><div style="font-size:11px;color:#999;">周末活动抽数</div><div style="font-weight:bold;color:#d97706;">${user.weekendDraws || 0}${user.weekendCardCount ? '（周末小卡' + user.weekendCardCount + '张）' : ''}</div></div>
+                    <div><div style="font-size:11px;color:#999;">周末获得</div><div>${weekendGet}</div></div>
+                    <div><div style="font-size:11px;color:#999;">浪漫疯子抽数</div><div>${user.romanceDraws || 0}${user.romanceCardCount ? '（小卡' + user.romanceCardCount + '张）' : ''}</div></div>
+                    <div><div style="font-size:11px;color:#999;">浪漫获得</div><div>${romanceGet}</div></div>
+                    <div><div style="font-size:11px;color:#999;">终极活动抽数</div><div>${user.finalDraws || 0}${user.finalEffectiveDraws ? '（有效' + user.finalEffectiveDraws + '）' : ''}</div></div>
+                    <div><div style="font-size:11px;color:#999;">终极获得</div><div>${user.finalCondition || '-'}</div></div>
                     <div><div style="font-size:11px;color:#999;">宣传集赞礼</div><div>${giftHtml}</div></div>
+                    <div><div style="font-size:11px;color:#999;">首次支付时间</div><div>${user.firstPayTime || '-'}</div></div>
                 </div>
                 <div style="margin-top:12px;">
                     <div style="font-size:11px;color:#999;margin-bottom:4px;">卡片明细（R1,R2,…,SR1,…排序）</div>
                     <div style="font-size:13px;line-height:1.7;word-break:break-all;">${sortCards(user.items || '') || '<span style="color:#999;">无</span>'}</div>
                 </div>
                 <div style="margin-top:12px;">
-                    <div style="font-size:11px;color:#999;margin-bottom:4px;">碎卡兑换审核状态</div>
+                    <div style="font-size:11px;color:#999;margin-bottom:4px;">碎卡兑换审核状态${merged ? '（按来源账号）' : ''}</div>
                     ${suikaHtml}
                 </div>
             `;
@@ -3403,6 +3624,7 @@
         function orderModalHtml(user) {
             if (!user) return '';
             const esc = s => String(s === undefined || s === null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const merged = !!(user._isMerged);
             const rows = [];
             const orderDraws = (user.orderDraws || []).slice().sort((a, b) => {
                 const ta = a.time ? a.time.getTime() : 0;
@@ -3415,6 +3637,7 @@
                 if (o.isPrize) tags.push('<span style="background:#e0e7ff;color:#4f46e5;padding:1px 6px;border-radius:4px;font-size:11px;">奖品</span>');
                 const timeStr = o.time && !isNaN(o.time.getTime()) ? o.time.toLocaleString('zh-CN', { hour12: false }) : '-';
                 rows.push(`<tr>
+                    ${merged ? `<td style="padding:6px 10px;border-bottom:1px solid #f0f0f0;font-size:12px;color:#818cf8;">${esc(o._owner || user.wechat || '-')}</td>` : ''}
                     <td style="padding:6px 10px;border-bottom:1px solid #f0f0f0;font-size:12px;">${i + 1}</td>
                     <td style="padding:6px 10px;border-bottom:1px solid #f0f0f0;font-size:12px;word-break:break-all;">${esc(o.orderNo || '-')}</td>
                     <td style="padding:6px 10px;border-bottom:1px solid #f0f0f0;font-size:12px;">${timeStr}</td>
@@ -3425,6 +3648,7 @@
             const buyouRows = (user.buyouOrders || []).map((b, i) => {
                 const timeStr = b.time && !isNaN(b.time.getTime()) ? b.time.toLocaleString('zh-CN', { hour12: false }) : '-';
                 return `<tr>
+                    ${merged ? `<td style="padding:6px 10px;border-bottom:1px solid #f0f0f0;font-size:12px;color:#818cf8;">${esc(b._owner || user.wechat || '-')}</td>` : ''}
                     <td style="padding:6px 10px;border-bottom:1px solid #f0f0f0;font-size:12px;">${i + 1}</td>
                     <td style="padding:6px 10px;border-bottom:1px solid #f0f0f0;font-size:12px;word-break:break-all;">${esc(b.orderNo || '-')}</td>
                     <td style="padding:6px 10px;border-bottom:1px solid #f0f0f0;font-size:12px;">${timeStr}</td>
@@ -3432,18 +3656,18 @@
                 </tr>`;
             });
             const orderBody = rows.length > 0
-                ? `<table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#eef4fa;"><th style="padding:8px 10px;font-size:12px;text-align:left;">#</th><th style="padding:8px 10px;font-size:12px;text-align:left;">订单号</th><th style="padding:8px 10px;font-size:12px;text-align:left;">时间</th><th style="padding:8px 10px;font-size:12px;">抽数</th><th style="padding:8px 10px;font-size:12px;text-align:left;">标记</th></tr></thead><tbody>${rows.join('')}</tbody></table>`
+                ? `<table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#eef4fa;">${merged ? '<th style="padding:8px 10px;font-size:12px;text-align:left;">账号</th>' : ''}<th style="padding:8px 10px;font-size:12px;text-align:left;">#</th><th style="padding:8px 10px;font-size:12px;text-align:left;">订单号</th><th style="padding:8px 10px;font-size:12px;text-align:left;">时间</th><th style="padding:8px 10px;font-size:12px;">抽数</th><th style="padding:8px 10px;font-size:12px;text-align:left;">标记</th></tr></thead><tbody>${rows.join('')}</tbody></table>`
                 : '<div style="color:#999;font-size:12px;padding:8px 0;">无订单明细数据</div>';
             const buyouBody = buyouRows.length > 0
-                ? `<table style="width:100%;border-collapse:collapse;margin-top:8px;"><thead><tr style="background:#eef4fa;"><th style="padding:8px 10px;font-size:12px;text-align:left;">#</th><th style="padding:8px 10px;font-size:12px;text-align:left;">补邮订单号</th><th style="padding:8px 10px;font-size:12px;text-align:left;">时间</th><th style="padding:8px 10px;font-size:12px;">补邮份数</th></tr></thead><tbody>${buyouRows.join('')}</tbody></table>`
+                ? `<table style="width:100%;border-collapse:collapse;margin-top:8px;"><thead><tr style="background:#eef4fa;">${merged ? '<th style="padding:8px 10px;font-size:12px;text-align:left;">账号</th>' : ''}<th style="padding:8px 10px;font-size:12px;text-align:left;">#</th><th style="padding:8px 10px;font-size:12px;text-align:left;">补邮订单号</th><th style="padding:8px 10px;font-size:12px;text-align:left;">时间</th><th style="padding:8px 10px;font-size:12px;">补邮份数</th></tr></thead><tbody>${buyouRows.join('')}</tbody></table>`
                 : '';
             return `
                 <div style="position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;" onclick="if(event.target===this)closeOrderModal()">
                     <div style="background:#fff;border-radius:14px;max-width:760px;width:100%;max-height:82vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,0.25);">
                         <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-bottom:1px solid #f0f0f0;position:sticky;top:0;background:#fff;border-radius:14px 14px 0 0;">
                             <div>
-                                <span style="font-weight:bold;font-size:15px;">📦 订单详情</span>
-                                <span style="margin-left:8px;font-size:12px;color:#999;">${esc(user.wechat || '-')}（总抽数 ${user.totalDraws || 0}）</span>
+                                <span style="font-weight:bold;font-size:15px;">📦 订单详情${merged ? `<span style="display:inline-block;background:#eef2ff;color:#4f46e5;padding:1px 8px;border-radius:10px;font-size:11px;margin-left:6px;">已合并${(user.mergedFrom || []).length}个账号</span>` : ''}</span>
+                                <span style="margin-left:8px;font-size:12px;color:#999;">${esc(user.wechat || '-')}${merged ? ' 等 ' + (user.mergedFrom || []).length + ' 个账号' : ''}（总抽数 ${user.totalDraws || 0}）</span>
                             </div>
                             <button onclick="closeOrderModal()" style="border:none;background:#f0f0f0;width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:14px;line-height:1;">✕</button>
                         </div>
