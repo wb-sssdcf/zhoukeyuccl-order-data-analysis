@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>抽抽乐订单数据分析（待优化 2026.8.28 12：20更新）</title>
+    <title>抽抽乐订单数据分析</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: linear-gradient(160deg, #20517d 0%, #4f84b8 32%, #ffffff 58%, #e7c26d 100%); background-attachment: fixed; min-height: 100vh; padding: 20px; }
+        body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: linear-gradient(160deg, #20517d 0%, #4f84b8 32%, #ffffff 58%, #e7c26d 100%); background-attachment: auto; min-height: 100vh; padding: 20px; }
         .container { max-width: 1400px; margin: 0 auto; }
         
         .header { text-align: center; color: white; margin-bottom: 30px; }
@@ -32,8 +32,15 @@
         .btn:hover { transform: translateY(-2px); }
         .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
         .btn-sm { padding: 6px 15px; font-size: 13px; margin-top: 0; }
+        /* 碎卡操作按钮（修改/放行）：触屏友好、并排不换行 */
+        .suika-op-btn { display: inline-block; padding: 7px 12px; min-height: 36px; white-space: nowrap; border-radius: 8px; font-size: 12px; cursor: pointer; vertical-align: middle; line-height: 1.2; }
+        /* 主结果区获得卡 Tooltip（自定义悬浮详情框） */
+        .suika-tip { position: absolute; z-index: 999; background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; box-shadow: 0 10px 28px rgba(0,0,0,0.16); padding: 10px 14px; top: 100%; left: 0; margin-top: 4px; max-width: 360px; max-height: 300px; overflow: auto; white-space: normal; font-size: 12px; line-height: 1.6; text-align: left; }
+        .tip-card { padding: 0; }
         
         .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px; }
+        /* 碎卡区统计卡：桌面端 5 列一行 */
+        #suikaResultSection .stats-grid { grid-template-columns: repeat(5, 1fr); }
         .stat-card { background: white; border-radius: 12px; padding: 20px; text-align: center; box-shadow: 0 5px 20px rgba(0,0,0,0.08); }
         .stat-card .value { font-size: 28px; font-weight: bold; color: #20517d; margin-bottom: 5px; }
         .stat-card .label { font-size: 14px; color: #999; }
@@ -54,26 +61,26 @@
         th { background: #eef4fa; color: #4a5a6a; font-weight: 600; position: sticky; top: 0; z-index: 10; padding: 6px 8px; }
         tr:hover { background: #f2f7fc; }
         /* 用户数据表列宽 */
-        #userTable col.col-account { width: 90px; }
-        #userTable col.col-phone { width: 90px; }
-        #userTable col.col-orders { width: 50px; }
-        #userTable col.col-orderno { width: 130px; }
-        #userTable col.col-items { width: 150px; }
-        #userTable col.col-draws { width: 50px; }
-        #userTable col.col-duanhe { width: 55px; }
-        #userTable col.col-milestone { width: 200px; }
-        #userTable col.col-allbonus { width: 110px; }
-        #userTable col.col-specialbonus { width: 110px; }
-        #userTable col.col-xuanchuan { width: 100px; }
-        #userTable col.col-limited { width: 110px; }
-        #userTable col.col-buyou { width: 100px; }
-        #userTable col.col-paytime { width: 130px; }
-        #userTable col.col-romancedraws { width: 70px; }
-        #userTable col.col-romance { width: 90px; }
-        #userTable col.col-weekendraws { width: 70px; }
-        #userTable col.col-weekend { width: 90px; }
-        #userTable col.col-finaldraws { width: 70px; }
-        #userTable col.col-final { width: 150px; }
+        #userTable col.col-account { width: 75px; }
+        #userTable col.col-phone { width: 75px; }
+        #userTable col.col-orders { width: 36px; }
+        #userTable col.col-orderno { width: 80px; }
+        #userTable col.col-items { width: 85px; }
+        #userTable col.col-draws { width: 36px; }
+        #userTable col.col-duanhe { width: 36px; }
+        #userTable col.col-milestone { width: 95px; }
+        #userTable col.col-allbonus { width: 75px; }
+        #userTable col.col-specialbonus { width: 75px; }
+        #userTable col.col-xuanchuan { width: 65px; }
+        #userTable col.col-limited { width: 75px; }
+        #userTable col.col-buyou { width: 75px; }
+        #userTable col.col-paytime { width: 75px; }
+        #userTable col.col-romancedraws { width: 45px; }
+        #userTable col.col-romance { width: 75px; }
+        #userTable col.col-weekendraws { width: 45px; }
+        #userTable col.col-weekend { width: 75px; }
+        #userTable col.col-finaldraws { width: 45px; }
+        #userTable col.col-final { width: 90px; }
         #userTable td, #userTable th { white-space: nowrap; }
         #userTable td.wrap, #userTable th.wrap { white-space: normal; }
         
@@ -93,6 +100,7 @@
         @media (max-width: 768px) {
             body { padding: 10px; }
             .stats-grid { grid-template-columns: repeat(2, 1fr); }
+        #suikaResultSection .stats-grid { grid-template-columns: repeat(2, 1fr); }
             .charts-row { grid-template-columns: 1fr; }
             .header h1 { font-size: 20px; }
             .upload-section { padding: 16px; }
@@ -104,13 +112,45 @@
             .search-box { width: 100%; }
             .table-header { flex-direction: column; align-items: stretch; }
             .chart-container { height: 220px; }
+            /* 弹窗表单：手机端两列 grid 塌缩为单列 */
+            #suikaEditModalWrap div[style*="grid-template-columns:1fr 1fr"] { grid-template-columns: 1fr !important; }
+            /* 触屏优化：操作按钮加大触控区域 */
+            .suika-op-btn { min-height: 40px; padding: 8px 14px; }
+            /* 主结果区窄屏隐藏次要列（端盒/补邮情况） */
+            #userTable th:nth-child(7), #userTable td:nth-child(7),
+            #userTable th:nth-child(13), #userTable td:nth-child(13) { display: none; }
+        }
+        /* 中屏（平板）适配 */
+        @media (max-width: 1024px) {
+            body { padding: 14px; }
+            .stats-grid { grid-template-columns: repeat(3, 1fr); }
+            .header h1 { font-size: 24px; }
+            .upload-section { padding: 20px; }
+            .upload-box { padding: 28px; }
+            .upload-box div:first-child { font-size: 40px; }
+            .upload-box p { font-size: 13px; }
+            .table-header { flex-direction: column; align-items: flex-start; }
+            /* 主结果区隐藏次要列（超like卡/全员特典/7.13-7.15抽数/7.18-7.20抽数） */
+            #userTable th:nth-child(9), #userTable td:nth-child(9),
+            #userTable th:nth-child(10), #userTable td:nth-child(10),
+            #userTable th:nth-child(15), #userTable td:nth-child(15),
+            #userTable th:nth-child(17), #userTable td:nth-child(17) { display: none; }
+        }
+        /* 主结果区 20 列瘦身策略：桌面保持全列（列宽压缩至 1400px 内），窄屏按层级隐藏次要列 */
+        @media (max-width: 900px) {
+            #userTable th:nth-child(3), #userTable td:nth-child(3),
+            #userTable th:nth-child(8), #userTable td:nth-child(8),
+            #userTable th:nth-child(11), #userTable td:nth-child(11),
+            #userTable th:nth-child(16), #userTable td:nth-child(16),
+            #userTable th:nth-child(18), #userTable td:nth-child(18) { display: none; }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>📊 抽抽乐订单数据分析（待优化2026.8.28 14：20更新）</h1>
+            <h1>📊 抽抽乐订单数据分析</h1>
+            <div style="font-size:12px;color:#999;margin:-8px 0 14px;">最后更新：2026-09-01</div>
             <p>上传Excel文件，自动生成数据分析报告</p>
         </div>
 
@@ -122,6 +162,10 @@
             </div>
             <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" multiple>
             <button class="btn" id="analyzeBtn" disabled>开始分析</button>
+            <div id="analysisProgressArea" class="hidden" style="margin-top:12px;max-width:420px;">
+                <div style="display:flex;justify-content:space-between;font-size:12px;color:#666;margin-bottom:4px;"><span>分析进度</span><span id="analysisProgressText">准备中...</span></div>
+                <div style="height:8px;background:#e5e7eb;border-radius:8px;overflow:hidden;"><div id="analysisProgressBar" style="height:100%;width:0%;background:#2563eb;border-radius:8px;transition:width .15s ease;"></div></div>
+            </div>
             <div id="fileList" style="margin-top: 15px; color: #666;"></div>
         </div>
 
@@ -133,6 +177,10 @@
             </div>
             <input type="file" id="suikaFileInput" accept=".xlsx,.xls,.csv">
             <button class="btn" id="suikaAnalyzeBtn" disabled>开始审核</button>
+            <div id="suikaProgressArea" class="hidden" style="margin-top:12px;max-width:420px;">
+                <div style="display:flex;justify-content:space-between;font-size:12px;color:#666;margin-bottom:4px;"><span>碎卡审核进度</span><span id="suikaProgressText">准备中...</span></div>
+                <div style="height:8px;background:#e5e7eb;border-radius:8px;overflow:hidden;"><div id="suikaProgressBar" style="height:100%;width:0%;background:#20517d;border-radius:8px;transition:width .15s ease;"></div></div>
+            </div>
             <label style="margin-left:10px;font-size:13px;color:#555;display:inline-flex;align-items:center;gap:4px;cursor:pointer;user-select:none;">
                 <input type="checkbox" id="suikaMergePhoneCb" checked style="accent-color:#20517d;cursor:pointer;"> 审核时按手机号聚合多账号（详情展示保持原样）
             </label>
@@ -160,45 +208,51 @@
             <div class="table-section">
                 <div class="table-header">
                     <h3>🔍 碎卡兑换审核结果</h3>
+                    <input type="text" id="suikaSearchInput" class="search-box" placeholder="搜索昵称/手机号/订单号" style="width:220px;margin-right:10px;">
                     <div>
                         <span style="font-size:12px;color:#999;margin-right:10px;">绿色=通过，橙色=未找到用户，黄色=需人工处理（不通过与需人工复核已合并）</span>
                         <button class="btn btn-sm" onclick="exportSuikaResult()">📥 导出审核结果Excel</button>
                         <button class="btn btn-sm" onclick="exportSuikaNotFound()">📥 导出未匹配用户清单</button>
+                        <button class="btn btn-sm" onclick="exportSuikaEditLog()">📥 导出修改记录</button>
                     </div>
                 </div>
-                <div class="table-section">
-                    <div class="table-header" style="border:none;padding:6px 0;">
-                        <h3 style="font-size:14px;margin:0;">📋 提交级审核汇总（整体判定口径）</h3>
-                    </div>
-                    <div class="table-wrapper" style="max-height:420px;">
-                        <table id="suikaSubmitSummaryTable">
-                            <thead>
-                                <tr>
-                                    <th>提交编号</th><th>昵称</th><th>手机号</th><th>请求数</th>
-                                    <th>换入汇总</th><th>换出汇总</th>
-                                    <th>审核结果</th><th>原因汇总</th>
-                                </tr>
-                            </thead>
-                            <tbody id="suikaSubmitSummaryBody"></tbody>
-                        </table>
-                    </div>
+                <div class="table-header" style="border:none;padding:6px 0;">
+                    <h3 style="font-size:14px;margin:0;">📋 提交级审核汇总（整体判定口径）</h3>
                 </div>
-                <div class="table-section">
-                    <div class="table-header" style="border:none;padding:6px 0;">
-                        <h3 style="font-size:14px;margin:0;">📄 兑换请求明细（逐条核对，供查看）</h3>
-                    </div>
-                    <div class="table-wrapper" style="max-height:600px;">
-                        <table id="suikaResultTable">
-                            <thead>
-                                <tr>
-                                    <th>提交编号</th><th>请求</th><th>昵称</th><th>手机号</th><th>总抽数</th>
-                                    <th>兑换类型</th><th>换入卡面</th><th>换出卡明细</th>
-                                    <th>审核结果</th><th>原因明细</th>
-                                </tr>
-                            </thead>
-                            <tbody id="suikaResultBody"></tbody>
-                        </table>
-                    </div>
+                <div class="table-wrapper" style="max-height:420px;">
+                    <table id="suikaSubmitSummaryTable">
+                        <colgroup>
+                            <col style="width:70px;"><col style="width:80px;"><col style="width:95px;"><col style="width:60px;">
+                            <col style="width:110px;"><col style="width:160px;"><col style="width:100px;"><col style="width:130px;"><col style="width:130px;">
+                        </colgroup>
+                        <thead>
+                            <tr>
+                                <th>提交编号</th><th>昵称</th><th>手机号</th><th>请求数</th>
+                                <th>换入汇总</th><th>换出汇总</th>
+                                <th>审核结果</th><th>原因汇总</th><th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="suikaSubmitSummaryBody"></tbody>
+                    </table>
+                </div>
+                <div class="table-header" style="border:none;padding:12px 0 6px;">
+                    <h3 style="font-size:14px;margin:0;">📄 兑换请求明细（逐条核对，供查看）</h3>
+                </div>
+                <div class="table-wrapper" style="max-height:600px;">
+                    <table id="suikaResultTable">
+                        <colgroup>
+                            <col style="width:70px;"><col style="width:50px;"><col style="width:80px;"><col style="width:95px;"><col style="width:50px;"><col style="width:70px;">
+                            <col style="width:110px;"><col style="width:150px;"><col style="width:100px;"><col style="width:130px;"><col style="width:150px;">
+                        </colgroup>
+                        <thead>
+                            <tr>
+                                <th>提交编号</th><th>请求</th><th>昵称</th><th>手机号</th><th>总抽数</th>
+                                <th>兑换类型</th><th>换入卡面</th><th>换出卡明细</th>
+                                <th>审核结果</th><th>原因明细</th><th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="suikaResultBody"></tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -504,6 +558,7 @@
             if (fileDataList.length === 0) return;
             loadingSection.classList.remove('hidden');
             resultSection.classList.add('hidden');
+            document.getElementById('analysisProgressArea').classList.remove('hidden');
 
             await new Promise(r => setTimeout(r, 300));
             try {
@@ -534,7 +589,7 @@
                 }
                 
                 rawOrdersData = allData;
-                processData(allData);
+                await processData(allData);
                 renderRawData(allData);
                 renderCharts();
                 cardStatsPage = 1;
@@ -542,11 +597,13 @@
                 filteredData = [...userData];
                 renderTable(1);
                 loadingSection.classList.add('hidden');
+                document.getElementById('analysisProgressArea').classList.add('hidden');
                 resultSection.classList.remove('hidden');
                 setTimeout(() => { Object.values(charts).forEach(c => c.resize()); }, 100);
             } catch (error) {
                 alert('解析文件失败：' + error.message);
                 loadingSection.classList.add('hidden');
+                document.getElementById('analysisProgressArea').classList.add('hidden');
             }
         });
 
@@ -620,10 +677,26 @@
             return '其他';
         }
 
-        function processData(df) {
-            const cardData = [], orderData = [];
+        // 分析进度条更新 + 让出主线程（processData 分片用）
+        function setAnalysisProgress(pct, text) {
+            const bar = document.getElementById('analysisProgressBar');
+            const txt = document.getElementById('analysisProgressText');
+            if (bar) bar.style.width = Math.max(0, Math.min(100, pct)) + '%';
+            if (txt) txt.textContent = text || '';
+        }
+        function yieldToMain() {
+            return new Promise(resolve => setTimeout(resolve, 0));
+        }
 
-            df.forEach(row => {
+        async function processData(df) {
+            const cardData = [], orderData = [];
+            const __total = df.length;
+            const __BATCH = 5000;
+            setAnalysisProgress(0, '准备分析数据...');
+            for (let __s = 0; __s < __total; __s += __BATCH) {
+                const __end = Math.min(__s + __BATCH, __total);
+                for (let __i = __s; __i < __end; __i++) {
+                    const row = df[__i];
                 const orderNo = row['订单编号'] || row['订单号'];
                 const wechat = row['下单账号'] || row['账号'];
                 const phone = row['收货人/提货人手机号'] || row['手机号'] || row['收货人手机号'];
@@ -807,7 +880,10 @@
                         cardData.push({ orderNo, wechat, phone, recipientName, payTime, cardName, cardType: getCardType(cardName), activityPeriod, isRomancePeriod });
                     });
                 }
-            });
+                }
+                setAnalysisProgress(Math.round((__end / __total) * 45), `正在解析订单数据... ${__end}/${__total}`);
+                await yieldToMain();
+            }
 
             const userMap = new Map();
             
@@ -1247,6 +1323,7 @@
             });
 
             userData.sort((a, b) => b.totalDraws - a.totalDraws);
+            setAnalysisProgress(75, '正在生成用户统计与卡片统计...');
 
             const cardCountMap = new Map();
             cardData.forEach(card => {
@@ -1364,6 +1441,7 @@
                 { period: '收官终极活动(7.25-7.31)', orders: 0, users: new Set(), draws: 0 },
                 { period: '整个活动期', orders: 0, users: new Set(), draws: 0 }
             ];
+            setAnalysisProgress(100, '分析完成');
             
             function getPeriodIndex(t) {
                 if (!t) return -1;
@@ -1774,7 +1852,7 @@
                     <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${user.orderNos || ''}">
                         <span onclick="window.__rowUsers && showOrderModal(window.__rowUsers[${__ri}])" style="cursor:pointer;color:#20517d;text-decoration:underline;" title="点击查看订单明细">${user.orderNos || ''}</span>
                     </td>
-                    <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${user.items || ''}">${user.items || ''}</td>
+                    <td class="suika-tip-cell" style="max-width:200px;position:relative;overflow:visible;" title="${escAttr(user.items || '')}"><span style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${user.items || ''}</span>${user.items ? `<div class="suika-tip" style="display:none;">${suikaTipHtml(user.items)}</div>` : ''}</td>
                     <td>${user.totalDraws || 0}</td>
                     <td>${isDuanheBadge}</td>
                     <td>${milestoneBadge}</td>
@@ -1817,6 +1895,49 @@
             pagination.innerHTML = html;
         }
 
+        // 主结果区"获得卡"列自定义 Tooltip：按稀有度分组着色展示卡面明细（桌面端悬浮，触屏保持原生 title 兜底）
+        function suikaTipHtml(itemsStr) {
+            if (!itemsStr || itemsStr === '无') return '';
+            const items = String(itemsStr).split(/[;；]/).map(x => x.trim()).filter(Boolean);
+            const groups = { 'SSSR': [], 'SSR': [], 'SR': [], 'R': [], 'N': [], '其他': [] };
+            const colors = { 'SSSR': '#dc2626', 'SSR': '#d97706', 'SR': '#7c3aed', 'R': '#2563eb', 'N': '#6b7280', '其他': '#6b7280' };
+            items.forEach(it => {
+                const p = parseCardItem(it);
+                const key = (p && p.type !== 'UNKNOWN' && groups[p.type]) ? p.type : '其他';
+                groups[key].push({ name: (p && p.type !== 'UNKNOWN' && p.name) ? p.name : it, qty: (p && p.type !== 'UNKNOWN' && p.qty > 0) ? p.qty : 1 });
+            });
+            let html = '';
+            ['SSSR', 'SSR', 'SR', 'R', 'N', '其他'].forEach(g => {
+                const list = groups[g];
+                if (!list || list.length === 0) return;
+                html += `<div style="margin-bottom:6px;"><div style="font-weight:bold;color:${colors[g]};font-size:12px;margin-bottom:2px;">${g === '其他' ? '其他' : g + ' 卡'}</div>`;
+                html += list.map(x => `<div class="tip-card" style="color:${colors[g]};font-size:12px;line-height:1.7;">${x.name}${x.qty > 1 ? 'x' + x.qty : ''}</div>`).join('');
+                html += '</div>';
+            });
+            return html;
+        }
+        // Tooltip 悬浮/移开（事件委托，桌面端 hover 生效）
+        document.addEventListener('mouseover', function (e) {
+            if (window.matchMedia('(hover: none)').matches) return;
+            const cell = e.target.closest ? e.target.closest('.suika-tip-cell') : null;
+            if (!cell) return;
+            const tip = cell.querySelector(':scope > .suika-tip');
+            if (!tip) return;
+            tip.style.display = 'block';
+            // 横向溢出时右对齐；纵向空间不足时向上展开
+            const cellRect = cell.getBoundingClientRect();
+            const tipRect = tip.getBoundingClientRect();
+            if (cellRect.right + tipRect.width > window.innerWidth - 8) { tip.style.left = 'auto'; tip.style.right = '0'; }
+            if (cellRect.bottom + tipRect.height > window.innerHeight - 8) { tip.style.top = 'auto'; tip.style.bottom = '100%'; tip.style.marginTop = '0'; tip.style.marginBottom = '4px'; }
+        });
+        document.addEventListener('mouseout', function (e) {
+            if (window.matchMedia('(hover: none)').matches) return;
+            const cell = e.target.closest ? e.target.closest('.suika-tip-cell') : null;
+            if (!cell) return;
+            if (e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('.suika-tip-cell') === cell) return;
+            const tip = cell.querySelector(':scope > .suika-tip');
+            if (tip) tip.style.display = 'none';
+        });
         function doSearch() {
             const rawKeyword = document.getElementById('searchInput').value.trim();
             const keyword = rawKeyword.toLowerCase();
@@ -1976,7 +2097,21 @@
                 if (!phoneToAccounts[p]) phoneToAccounts[p] = [];
                 if (phoneToAccounts[p].indexOf(acct) < 0) phoneToAccounts[p].push(acct);
             });
-            const headers = ['查询码(下单账号)', '下单账号', '收货人手机号', '总抽数', '是否端盒', '超like卡', '全员特典', '宣传集赞礼', '补邮情况', '限时小卡获得', '浪漫疯子获得', '周末活动获得', '终极活动获得', '获得卡片', '个人满抽礼', '备注'];
+            // 碎卡审核状态映射（按手机号/账号关联，最严口径优先：需人工 > 通过 > 未参与）
+            const suikaStatusMap = {};
+            (suikaSubmissions || []).forEach(s => {
+                const st = s.audit.status || (s.audit.pass ? '通过' : '需人工处理');
+                const key = st === '通过' ? '通过' : '需人工';
+                const sp = normalizePhone(String(s.phone || '').trim());
+                if (sp) { const k = 'p:' + sp; if (!suikaStatusMap[k] || suikaStatusMap[k] !== '需人工') suikaStatusMap[k] = key; }
+                const acct = String((s.user && s.user.wechat) || s.nickname || '').trim();
+                if (acct) { const k = 'a:' + acct; if (!suikaStatusMap[k] || suikaStatusMap[k] !== '需人工') suikaStatusMap[k] = key; }
+            });
+            const suikaStatusTextOf = (acct, phone) => {
+                const key = suikaStatusMap['a:' + acct] || suikaStatusMap['p:' + normalizePhone(phone)] || '';
+                return key === '通过' ? '审核通过' : (key === '需人工' ? '需人工审核，请联系微店客服' : '未参与');
+            };
+            const headers = ['查询码(下单账号)', '下单账号', '收货人手机号', '总抽数', '是否端盒', '超like卡', '全员特典', '宣传集赞礼', '补邮情况', '限时小卡获得', '浪漫疯子获得', '周末活动获得', '终极活动获得', '获得卡片', '个人满抽礼', '碎卡兑换审核状态', '备注'];
             const data = userData.map(u => {
                 // 补邮情况描述：无需补邮 / 已补邮 / 未补邮
                 // 规则：满10抽无需补邮，少于10抽才需要补邮
@@ -2052,6 +2187,7 @@
                     u.finalCondition || '-',
                     u.items || '',
                     u.milestoneRewards || '',
+                    suikaStatusTextOf(wechat, phone),
                     remark
                 ];
             });
@@ -2059,17 +2195,34 @@
         }
 
         // 独立导出来豹接龙查询表（与集赞导入结果整合导出的 sheet 同源，单独一个文件）
-        function exportLaibaoOnly() {
+        async function exportLaibaoOnly() {
             if (!userData || userData.length === 0) { alert('请先上传主订单数据并点击「开始分析」后再导出来豹接龙查询表'); return; }
             const wb = XLSX.utils.book_new();
             const ws = exportLaibaoSheet();
-            ws['!cols'] = [{ wch: 22 }, { wch: 24 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 14 }];
+            ws['!cols'] = [{ wch: 22 }, { wch: 24 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 18 }, { wch: 14 }];
             XLSX.utils.book_append_sheet(wb, ws, '来豹接龙查询表');
+            // 修改与放行记录 Sheet（复用修改记录+人工放行数据；无记录时放一行说明文字）
+            if (suikaSubmissions && suikaSubmissions.length > 0) {
+                const { headers, data } = buildSuikaEditLogSheet();
+                const rows = data.length > 0 ? data : [['（暂无修改或放行记录）', '', '', '', '', '', '']];
+                const wsLog = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+                wsLog['!cols'] = [{ wch: 14 }, { wch: 18 }, { wch: 16 }, { wch: 12 }, { wch: 60 }, { wch: 24 }, { wch: 20 }];
+                XLSX.utils.book_append_sheet(wb, wsLog, '修改与放行记录');
+            }
             // 按钮开关：是否并入碎卡审核结果（默认开启）
             const includeSuikaCb = document.getElementById('laibaoIncludeSuikaCb');
             const includeSuika = includeSuikaCb ? includeSuikaCb.checked : true;
-            if (includeSuika && suikaSubmissions && suikaSubmissions.length > 0) {
-                buildSuikaResultSheets(wb);
+            if (includeSuika) {
+                if (suikaSubmissions && suikaSubmissions.length > 0) {
+                    // 勾选分支整体 try/catch：任何异常都捕获并提示，确保下方 XLSX.writeFile 一定执行（至少导出不含审核结果的表）
+                    try {
+                        await buildSuikaResultSheets(wb);
+                    } catch (err) {
+                        alert('碎卡审核结果并入失败：' + (err && err.message ? err.message : err) + '。已跳过「碎卡审核结果」并入，本次仅导出不含审核结果的来豹表');
+                    }
+                } else {
+                    alert('尚未上传/审核碎卡兑换表，本次导出已跳过「碎卡审核结果」并入');
+                }
             }
             XLSX.writeFile(wb, getTimestampFilename('来豹接龙查询表'));
         }
@@ -2188,21 +2341,46 @@
 
         function normalizeCardId(str) {
             if (str === null || str === undefined) return '';
-            const s = String(str).toUpperCase().replace(/[\s\u2006\u00A0\u3000]+/g, '').replace(/[卡面:：,，、]/g, '');
+            const s = String(str).toUpperCase()
+                .replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+                .replace(/[\s\u2006\u00A0\u3000]+/g, '').replace(/[卡面:：,，、]/g, '');
             const m = s.match(/^(SSSR|SSR|SR|R|N)(\d+)$/);
             return m ? m[1] + m[2] : '';
         }
 
+        // 中文数字复合转换：一~九、十、十一~十九、二十、二十一、三十…九十九（含"两"、"百"）
+        function cnNumToIntCn(str) {
+            const digit = { '一': 1, '二': 2, '两': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9 };
+            const s = String(str || '').trim();
+            if (!s) return null;
+            if (digit[s] !== undefined) return digit[s];
+            if (s === '十') return 10;
+            if (s === '百' || s === '一百') return 100;
+            const parts = s.split('十');
+            if (parts.length === 2) {
+                const tens = parts[0] === '' ? 1 : (digit[parts[0]] !== undefined ? digit[parts[0]] : null);
+                const ones = parts[1] === '' ? 0 : (digit[parts[1]] !== undefined ? digit[parts[1]] : null);
+                if (tens === null || ones === null) return null;
+                return tens * 10 + ones;
+            }
+            return null;
+        }
+
+        // 数量解析：支持阿拉伯数字、全角数字（０-９）、中文数字（一~十、十一~九十九、两）、
+        // 以及含"张/个"等单位的文本；无法识别时返回 0（由调用方兜底）
         function parseQty(v) {
             if (v === null || v === undefined) return 0;
             if (typeof v === 'number') return Math.round(v);
-            const s = String(v).trim();
+            const s = String(v).trim().replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
             if (!s) return 0;
             if (/^[0-9.]+$/.test(s)) return Math.round(parseFloat(s));
             const m = s.match(/(\d+(?:\.\d+)?)/);
             if (m) return Math.round(parseFloat(m[1]));
-            if (s.includes('一')) return 1;
-            if (s.includes('两') || s.includes('二')) return 2;
+            const cn = s.match(/[一二两三四五六七八九十百]+/);
+            if (cn) {
+                const n = cnNumToIntCn(cn[0]);
+                if (n !== null) return n;
+            }
             return 0;
         }
 
@@ -2401,11 +2579,26 @@
             const cleanPhone = normalizePhone(phone);
             if (cleanPhone && cleanPhone.length >= 6) {
                 triedKeys.push('手机号');
-                let matches = userData.filter(x => normalizePhone(x.phone) === cleanPhone);
+                // 海外号归一化变体：886/852/853/65 开头（含 +886/00886 归一后）尝试去掉前缀再比对，
+                // 兼容主表存"短号"（如 932016329）而问卷填"886932016329"的情况
+                const phoneVariants = [cleanPhone];
+                if (/^(886|852|853|65)\d{6,}$/.test(cleanPhone)) phoneVariants.push(cleanPhone.replace(/^(886|852|853|65)/, ''));
+                const userPhoneEq = x => {
+                    const p = normalizePhone(x.phone);
+                    return p && phoneVariants.indexOf(p) >= 0;
+                };
+                const userWechatEq = x => {
+                    // 问卷"手机号"常填成下单账号(微店账号)+国际码，如 886932016329 = 下单账号 932016329
+                    const w = String(x.wechat || '').replace(/\s+/g, '');
+                    return w && phoneVariants.indexOf(w) >= 0;
+                };
+                let matches = userData.filter(x => userPhoneEq(x) || userWechatEq(x));
                 if (matches.length === 0) {
                     matches = userData.filter(x => {
                         const p = normalizePhone(x.phone);
-                        return p && p.length >= 6 && (p.includes(cleanPhone) || cleanPhone.includes(p));
+                        const w = String(x.wechat || '').replace(/\s+/g, '');
+                        return (p && p.length >= 6 && phoneVariants.some(v => p.includes(v) || v.includes(p))) ||
+                               (w && w.length >= 6 && phoneVariants.some(v => w.includes(v) || v.includes(w)));
                     });
                 }
                 if (matches.length > 0) {
@@ -2489,7 +2682,14 @@
             if (!suikaFile) return;
             if (!rawOrdersData || rawOrdersData.length === 0) { alert('请先上传主订单数据并点击「开始分析」后再审核'); return; }
             suikaAnalyzeBtn.disabled = true;
+            const progArea = document.getElementById('suikaProgressArea');
+            const progBar = document.getElementById('suikaProgressBar');
+            const progText = document.getElementById('suikaProgressText');
+            const setProg = (pct, txt) => { if (progBar) progBar.style.width = (pct || 0) + '%'; if (progText) progText.textContent = txt || ''; };
+            if (progArea) progArea.classList.remove('hidden');
+            setProg(5, '开始解析碎卡表...');
             try {
+                suikaAnalyzeBtn.textContent = '正在解析...';
                 const buf = await suikaFile.arrayBuffer();
                 let wb;
                 if (suikaFile.name.toLowerCase().endsWith('.csv')) {
@@ -2499,6 +2699,8 @@
                 }
                 suikaSubmissions = groupSuikaRowsFromWb(wb);
                 userCardCountsMap = buildUserCardCounts(rawOrdersData);
+                setProg(55, '匹配用户并审核...');
+                suikaAnalyzeBtn.textContent = '正在审核...';
                 const mergeOn = document.getElementById('suikaMergePhoneCb') ? document.getElementById('suikaMergePhoneCb').checked : false;
                 const multiOn = document.getElementById('suikaMergeMultiCb') ? document.getElementById('suikaMergeMultiCb').checked : true;
                 suikaSubmissions.forEach(s => {
@@ -2553,6 +2755,8 @@
                     }
                 });
                 renderSuikaResults();
+                setProg(100, '审核完成');
+                suikaAnalyzeBtn.textContent = '完成';
                 document.getElementById('suikaResultSection').classList.remove('hidden');
                 document.getElementById('suikaResultSection').scrollIntoView({ behavior: 'smooth' });
                 const statusCount = { '通过': 0, '未找到用户': 0, '需人工处理': 0 };
@@ -2562,6 +2766,8 @@
                 alert('碎卡兑换表解析失败：' + err.message);
             } finally {
                 suikaAnalyzeBtn.disabled = false;
+                suikaAnalyzeBtn.textContent = '开始审核';
+                if (progArea) progArea.classList.add('hidden');
             }
         });
 
@@ -2594,8 +2800,8 @@
         // 分隔符兼容顿号/逗号/分号/斜杠/竖线/·/&/+/换行/全半角
         // 返回 { review: boolean, cards: [{card, qty}] }；review=true 表示格式复杂需人工复核
         function parseOutCardCell(cellText, qtyText) {
-            const cell = String(cellText || '').trim();
-            const qty = String(qtyText || '').trim();
+            let cell = String(cellText || '').trim().replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+            let qty = String(qtyText || '').trim().replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
             if (!cell && !qty) return { review: false, cards: [] };
             if (!cell) {
                 // 换出卡面列为空，但张数列含卡面明细（如 '1 R1x3, R24x3'）时用张数列解析；纯数量视为空白
@@ -2622,7 +2828,8 @@
                         // 括号内为数量说明文字（非卡面列表）：剥离括号继续解析，张数由后续 qty 逻辑判定
                         cellWork = cellWork.replace(/[（(][^（）()]*[）)]/, '').trim();
                     } else {
-                        return { review: true, cards: [{ card: cell, qty: parseQty(qty) }] };
+                        // 括号内容既非纯数量也非卡面列表/数量说明：无法确认含义，返回空+review 由人工处理（不再生成 qty=0 假卡面）
+                        return { review: true, cards: [] };
                     }
                 }
             }
@@ -2675,7 +2882,9 @@
                 // 标记 review=true 但保留已解析出的卡面继续走剩余逻辑，由后续聚合判定决定是否需人工
                 review = true;
                 if (result.length === 0) {
-                    return { review: true, cards: [{ card: cell, qty: parseQty(qty) }] };
+                    // 完全无法解析出有效卡面：不返回 qty=0 的假卡面（避免"显示0"），
+                    // 返回空列表+review，由前置检查以"换出卡填写格式复杂/未解析出有效卡面"拦截
+                    return { review: true, cards: [] };
                 }
             }
             // qty 列显式配对：'R2 3张'/'3张R2' 出现在 qty 列时按卡面绑定
@@ -2823,17 +3032,17 @@
                                 multiIn: inCards.length > 1
                             };
                             cur.requests.push(req);
-                            if (ci === 0) cur._outTarget = req;
                         });
                     } else {
                         const req = { inCard, inQty: inQtyNum > 0 ? inQtyNum : 1, outCards: [], badIn: true };
                         cur.requests.push(req);
-                        cur._outTarget = req;
                     }
                 }
                 if (outCard || outQtyRaw) {
                     const parsed = parseOutCardCell(outCard, outQtyRaw);
-                    const target = cur._outTarget || (cur.requests.length > 0 ? cur.requests[cur.requests.length - 1] : null);
+                    // 换出卡归属最近一个请求（修复旧逻辑：_outTarget 指向组内第一个请求，
+                    // 会把"换入为空行"的补充换出卡全部堆积到第一个请求，造成明细显示旧值/错位）
+                    const target = cur.requests.length > 0 ? cur.requests[cur.requests.length - 1] : null;
                     if (parsed.review && target) target.review = true;
                     if (target) {
                         target.outRaw = outCard;
@@ -3123,12 +3332,104 @@
             return { pass: reasons.length === 0, usedDraws, reasons };
         }
 
+        // 审核原因分类：格式问题（填写/解析层面，可批量放行） vs 内容问题（实质性不符，需人工核实）
+        function suikaReasonClassify(reason) {
+            const s = String(reason || '');
+            if (/格式|未用标点|未解析|无法识别|未识别|括号|原始内容|空白|换出卡数为0|漏填|多填|张数异常|格式复杂|格式需留意|测试数据|换入卡面无法识别/.test(s)) return '格式';
+            if (/抽数不足|总抽数不足|未在该用户订单中抽到|数量不足|无法平换/.test(s)) return '内容';
+            return '';
+        }
+        function suikaReasonTagged(reason) {
+            const cls = suikaReasonClassify(reason);
+            if (!cls) return reason;
+            const color = cls === '格式' ? '#2563eb' : '#dc2626';
+            return `<span style="display:inline-block;background:${cls === '格式' ? '#dbeafe' : '#fee2e2'};color:${color};padding:0 6px;border-radius:8px;font-size:11px;margin-right:4px;white-space:nowrap;">${cls}问题</span>${reason}`;
+        }
+
+        // ---------- 提交级原因综合表述（优化B：不再堆叠 [请求N]，改为组级综合） ----------
+        // 第一行汇总兑换张数与换入卡面，随后逐条合并同类规则问题；请求明细表仍保留逐条详情
+        function buildSuikaSummaryReason(s, opts) {
+            const withHtml = !opts || opts.html !== false;
+            const lines = [];
+            // 第一行：本次提交共兑换 N 张卡：卡面1、卡面2（按卡面合并张数）
+            const inCards = [];
+            s.requests.forEach(r => {
+                const ra = r.audit || {};
+                const card = ra.inCard || r.inCard || '';
+                const qty = ra.inQty > 0 ? ra.inQty : 1;
+                if (!card) return;
+                const hit = inCards.find(x => x.card === card);
+                if (hit) hit.qty += qty; else inCards.push({ card, qty });
+            });
+            const totalInQty = inCards.reduce((sum, x) => sum + x.qty, 0);
+            if (totalInQty > 0) {
+                lines.push('本次提交共兑换 ' + totalInQty + ' 张卡：' + inCards.map(x => x.card + (x.qty > 1 ? 'x' + x.qty : '')).join('、'));
+            }
+            const allReasons = s.requests.flatMap(r => (r.audit ? (r.audit.reasons || []) : []));
+            if (allReasons.length === 0) {
+                if (s.audit.status === '通过' || s.audit.pass) lines.push('✓ 全部通过');
+                else if (s.audit.blockedFrom) lines.push('同手机号其他提交需人工处理（' + s.audit.blockedFrom + '）');
+                else lines.push(s.audit.status || '需人工处理');
+                return lines.join(withHtml ? '<br>' : '\n');
+            }
+            const tag = withHtml ? suikaReasonTagged : x => x;
+            // 1) 换出卡张数不足（合并同类，取代表性描述）
+            const qtyReasons = allReasons.filter(x => /换出卡张数异常/.test(x));
+            if (qtyReasons.length > 0) {
+                const m = qtyReasons[0].match(/应为(\d+)张[^，]*，实际(\d+)张/);
+                if (m) lines.push('换出卡张数不足：需 ' + m[1] + ' 张，实际填 ' + m[2] + ' 张');
+                else qtyReasons.forEach(x => lines.push(tag(x)));
+            }
+            // 2) 卡面不存在（去重合并）
+            const notOwnedCards = [];
+            allReasons.forEach(x => {
+                const m = x.match(/换出卡\s*([A-Za-z]+\d+)\s*未在该用户订单中抽到/);
+                if (m && notOwnedCards.indexOf(m[1]) < 0) notOwnedCards.push(m[1]);
+            });
+            if (notOwnedCards.length > 0) {
+                lines.push('卡面 ' + notOwnedCards.join('、') + ' 不存在，请核对卡面编号');
+            }
+            // 3) 持有不足（逐条，合并同一卡面多条时取最后一条）
+            const shortMap = {};
+            allReasons.forEach(x => {
+                const m = x.match(/换出卡([A-Za-z]+\d+)数量不足（需(\d+)张，实际拥有(\d+)张）/);
+                if (m) shortMap[m[1]] = { need: m[2], have: m[3] };
+            });
+            Object.keys(shortMap).forEach(card => {
+                lines.push('卡面 ' + card + ' 持有不足：需 ' + shortMap[card].need + ' 张，实际抽到 ' + shortMap[card].have + ' 张');
+            });
+            // 4) 抽数不足（保留原文含具体数字）
+            const drawReasons = allReasons.filter(x => /抽数不足/.test(x));
+            if (drawReasons.length > 0) {
+                drawReasons.forEach(x => lines.push(tag(x)));
+            }
+            // 5) 其它原因（去重保留，含格式类标签）
+            const seen = {};
+            allReasons.forEach(x => {
+                if (/换出卡张数异常|未在该用户订单中抽到|数量不足（需|抽数不足/.test(x)) return;
+                if (seen[x]) return;
+                seen[x] = true;
+                lines.push(tag(x));
+            });
+            return lines.join(withHtml ? '<br>' : '\n');
+        }
+
         // ---------- 碎卡审核结果渲染（三态：通过/未找到用户/需人工处理） ----------
+        // 碎卡区搜索框过滤：按昵称/手机号/订单号/提交编号包含匹配（空格分隔为多关键词 AND）
+        function suikaMatchSubmission(s, kw) {
+            if (!kw) return true;
+            const parts = kw.split(/\s+/).filter(Boolean);
+            const hay = [String(s.nickname || ''), String(s.phone || ''), String(s.orderNo || ''), String(s.code || '')].join(' ').toLowerCase();
+            return parts.every(p => hay.includes(p));
+        }
         function renderSuikaResults() {
-            const submissions = suikaSubmissions;
-            const totalSubmits = submissions.length;
+            const kw = document.getElementById('suikaSearchInput') ? document.getElementById('suikaSearchInput').value.trim().toLowerCase() : '';
+            const allSubs = suikaSubmissions;
+            const submissions = kw ? allSubs.filter(s => suikaMatchSubmission(s, kw)) : allSubs;
+            // 统计卡保持全量口径（仅过滤表数据）
+            const totalSubmits = allSubs.length;
             let passCount = 0, notFoundCount = 0, handleCount = 0, totalRequests = 0;
-            submissions.forEach(s => {
+            allSubs.forEach(s => {
                 totalRequests += s.requests.length;
                 if (s.audit.status === '通过') passCount++;
                 else if (s.audit.status === '未找到用户') notFoundCount++;
@@ -3168,7 +3469,8 @@
             const reasonStrOf = (s, ri) => {
                 const r = s.requests[ri];
                 if (r.audit.pass) return '';
-                return (s.requests.length > 1 ? `[请求${ri + 1}] ` : '') + (r.audit.reasons || []).join('；');
+                const reasons = (r.audit.reasons || []).map(suikaReasonTagged).join('；');
+                return (s.requests.length > 1 ? `[请求${ri + 1}] ` : '') + reasons;
             };
 
             // 提交级审核汇总表（整体判定口径，一行一提交）
@@ -3179,24 +3481,34 @@
                 const inStr = s.requests.map(r => inStrOf(r)).join('、');
                 const outStr = s.requests.map(r => outStrOf(r)).join(' ； ');
                 const selfReasons = s.requests.map((r, ri) => reasonStrOf(s, ri)).filter(Boolean);
-                let reasonStr = selfReasons.join('<br>');
-                if (!reasonStr) {
-                    if (status === '通过') {
-                        reasonStr = s.requests.some(r => r.audit.pass && r.warning) ? '通过（部分请求格式需留意）' : '通过';
-                    }
-                    else if (s.audit.blockedFrom) reasonStr = `同手机号其他提交需人工处理（${s.audit.blockedFrom}）`;
-                    else reasonStr = status;
-                }
                 const allReasons = s.requests.flatMap(r => r.audit.reasons || []);
+                // 提交级综合表述（优化B）：不再堆叠 [请求N]，改为组级综合；请求明细折叠仍保留逐条
+                let reasonStr = buildSuikaSummaryReason(s);
+                if (!reasonStr) reasonStr = status;
+                // 请求级明细（折叠展开，供查看逐条请求的换入/换出/原因）
+                const reqDetailHtml = s.requests.map((r, ri) => {
+                    const st = r.audit.type || s.audit.status || '需人工处理';
+                    const m2 = metaOf(st);
+                    const rReason = reasonStrOf(s, ri);
+                    return `<div style="padding:4px 0;border-bottom:1px dashed #e5e7eb;">
+                        <span style="font-weight:bold;">请求${ri + 1}：</span>${inStrOf(r) || '-'} → ${outStrOf(r) || '-'}
+                        <span style="margin-left:6px;">${badgeHtml(st, m2)}</span>
+                        ${rReason ? `<div style="font-size:11px;color:#888;margin-top:2px;">${rReason}</div>` : ''}
+                    </div>`;
+                }).join('');
                 return `<tr style="background:${meta.bg};">
                     <td>${s.code}</td>
                     <td>${s.nickname || '-'}</td>
                     <td>${phoneCellOf(s)}</td>
-                    <td>${s.requests.length}</td>
+                    <td>1次提交/${s.requests.length}请求</td>
                     <td style="max-width:200px;font-size:12px;">${inStr || '-'}</td>
                     <td style="max-width:260px;font-size:12px;">${outStr || '-'}</td>
                     <td>${badgeHtml(status, meta)}${cardBadgeOf(allReasons)}</td>
                     <td style="max-width:320px;font-size:12px;color:${meta.color};">${reasonStr}</td>
+                    <td style="white-space:nowrap;">
+                        <button type="button" class="suikaEditSubBtn suika-op-btn" data-code="${escHtml(s.code)}" style="border:1px solid #6b7280;background:#f9fafb;color:#374151;" title="修改该提交的昵称/姓名/手机号/订单号后重新匹配审核">修改</button>
+                        <details style="font-size:12px;display:inline-block;vertical-align:middle;margin-left:8px;"><summary style="cursor:pointer;color:#20517d;">查看请求明细</summary><div style="margin-top:6px;max-height:260px;overflow:auto;">${reqDetailHtml || '<span style="color:#999;">无请求</span>'}</div></details>
+                    </td>
                 </tr>`;
             }).join('');
 
@@ -3208,6 +3520,14 @@
                 const user = s.user;
                 const typeStr = r.audit.type || st;
                 const reasonStr = (reasonStrOf(s, ri) || st) + ((r.audit.pass && r.warning) ? '（格式需留意）' : '');
+                const released = r.audit.manuallyReleased;
+                // 修改：编辑换入/换出卡后重新审核（标记 manuallyEdited 供导出备注）
+                const suikaEditReqBtn = `<button type="button" class="suikaEditReqBtn suika-op-btn" data-code="${escHtml(s.code)}" data-ri="${ri}" style="border:1px solid #6b7280;background:#f9fafb;color:#374151;" title="修改该请求的换入卡/换出卡后重新审核">修改</button>`;
+                // 批量放行：确认内容无误后一键将格式类问题标记为通过（数据与全量导出同步）
+                // 按钮顺序：修改在前、放行在后（通过行保持"状态文字 + 修改"）
+                const actionHtml = (r.audit.pass
+                    ? (released ? '<span style="color:#059669;font-size:12px;white-space:nowrap;">已人工放行</span>' : '<span style="color:#999;font-size:12px;white-space:nowrap;">—</span>') + ' ' + suikaEditReqBtn
+                    : suikaEditReqBtn + `<button type="button" class="suikaReleaseBtn suika-op-btn" data-code="${s.code}" data-ri="${ri}" data-phone="${s.phone || ''}" style="border:1px solid #2563eb;background:#eff6ff;color:#2563eb;margin-left:6px;" title="确认该条请求内容无误后一键标记为通过（仅格式类问题建议使用）">放行</button>`);
                 return `<tr style="background:${meta.bg};">
                     <td>${s.code}</td>
                     <td>${ri + 1}/${s.requests.length}</td>
@@ -3219,9 +3539,65 @@
                     <td style="max-width:260px;font-size:12px;">${outStrOf(r) || '-'}</td>
                     <td>${badgeHtml(st, meta)}${cardBadgeOf(r.audit.reasons || [])}</td>
                     <td style="max-width:320px;font-size:12px;color:${meta.color};">${reasonStr}</td>
+                    <td style="white-space:nowrap;">${actionHtml}</td>
                 </tr>`;
             })).join('');
         }
+
+        // 碎卡区搜索框过滤绑定（输入即重渲染；script 在 DOM 之后执行，直接绑定）
+        (function () {
+            const se = document.getElementById('suikaSearchInput');
+            if (se) se.addEventListener('input', function () { renderSuikaResults(); });
+        })();
+
+        // ---------- 批量放行：一键将格式类问题请求标记为通过（优化B） ----------
+        // 只修改该请求的 audit 状态并重渲染；组内其它请求仍按原聚合判定保留
+        function suikaBatchRelease(code, ri) {
+            const sub = suikaSubmissions.find(x => String(x.code) === String(code));
+            if (!sub) return { ok: false, msg: '未找到提交组 ' + code };
+            const req = sub.requests[ri];
+            if (!req) return { ok: false, msg: `提交组 ${code} 中不存在请求 ${ri + 1}` };
+            if (req.audit.pass) return { ok: false, msg: '该请求已通过，无需放行' };
+            const prevReasons = (req.audit.reasons || []).slice();
+            req.audit.pass = true;
+            req.audit.type = '通过';
+            req.audit.manuallyReleased = true;
+            req.audit.releasedAt = new Date().toLocaleString('zh-CN', { hour12: false });
+            req.audit.reasons = [];
+            // 原因为内容类时标记强放行（提示该操作越过了实质不符校验）
+            req.audit.forceReleased = prevReasons.some(reason => suikaReasonClassify(reason) === '内容');
+            // 若该提交组所有请求均已通过，同步更新组级审核为通过
+            if (sub.requests.every(r => r.audit.pass)) {
+                sub.audit = { pass: true, status: '通过' };
+            } else {
+                sub.audit = { pass: false, status: '需人工处理' };
+            }
+            renderSuikaResults();
+            return { ok: true };
+        }
+
+        // 批量放行按钮事件委托（按钮由 renderSuikaResults 动态生成）
+        document.addEventListener('click', function (e) {
+            const editReqBtn = e.target.closest('.suikaEditReqBtn');
+            if (editReqBtn) {
+                const code = editReqBtn.getAttribute('data-code');
+                const ri = parseInt(editReqBtn.getAttribute('data-ri'), 10);
+                if (code !== null && !isNaN(ri)) { suikaOpenEditReqModal(code, ri); return; }
+            }
+            const editSubBtn = e.target.closest('.suikaEditSubBtn');
+            if (editSubBtn) {
+                const code = editSubBtn.getAttribute('data-code');
+                if (code !== null) { suikaOpenEditSubModal(code); return; }
+            }
+            const btn = e.target.closest('.suikaReleaseBtn');
+            if (!btn) return;
+            const code = btn.getAttribute('data-code');
+            const ri = parseInt(btn.getAttribute('data-ri'), 10);
+            if (code === null || isNaN(ri)) return;
+            if (!window.confirm('确认放行「' + code + '」的第 ' + (ri + 1) + ' 条请求？\n放行后该请求将标记为“通过”，请先确认内容无误。')) return;
+            const res = suikaBatchRelease(code, ri);
+            if (res && res.ok === false) window.alert(res.msg);
+        });
 
         // ---------- 兑换获得卡汇总（碎卡兑换获得卡 / 宣传集赞礼） ----------
         // 稀有度+编号升序排序（无数字编号排该稀有度末尾），参考 sortCards 思路
@@ -3287,10 +3663,12 @@
             const rows = [];
             suikaSubmissions.forEach(s => {
                 s.requests.forEach((r, ri) => {
+                    // 防御：请求未完成审核时 r.audit 可能缺失，统一兜底避免导出中断
+                    const audit = r.audit || { pass: false, type: '需人工处理', inCard: r.inCard || '', inQty: r.inQty || 0, reasons: [] };
                     rows.push({
                         code: s.code, nickname: s.nickname, phone: s.phone, orderNo: s.orderNo,
-                        user: s.user, ri: ri + 1, audit: r.audit,
-                        inCard: r.audit.inCard || r.inCard || '', inQty: r.inQty,
+                        user: s.user, ri: ri + 1, audit: audit,
+                        inCard: audit.inCard || r.inCard || '', inQty: r.inQty,
                         outStr: r.outCards.map(o => o.card + ((o.qty || 0) > 1 ? 'x' + o.qty : '')).join('、'),
                         totalOut: r.outCards.reduce((sum, o) => sum + (o.qty || 0), 0),
                         submitTime: s.submitTime
@@ -3309,15 +3687,11 @@
             // 提交级汇总 sheet（整体判定口径）
             const summaryHeaders = ['提交编号', '昵称', '手机号', '请求数', '换入汇总', '换出汇总', '审核结果', '原因汇总', '提交时间'];
             const summaryData = suikaSubmissions.map(s => {
-                const status = s.audit.status || (s.audit.pass ? '通过' : '需人工处理');
-                const inStr = s.requests.map(r => r.audit.inCard ? (r.audit.inCard + (r.audit.inQty > 1 ? 'x' + r.audit.inQty : '')) : (r.inCard || '（空）')).join('、');
+                const sAudit = s.audit || { pass: false, status: '需人工处理' };
+                const status = sAudit.status || (sAudit.pass ? '通过' : '需人工处理');
+                const inStr = s.requests.map(r => { const ra = r.audit || {}; return ra.inCard ? (ra.inCard + ((ra.inQty || 0) > 1 ? 'x' + ra.inQty : '')) : (r.inCard || '（空）'); }).join('、');
                 const outStr = s.requests.map(r => r.outCards.map(o => o.card + ((o.qty || 0) > 1 ? 'x' + o.qty : '')).join('、')).join(' ； ');
-                const reasonStr = (s.requests.map((r, ri) => {
-                    if (r.audit.pass) return '';
-                    return (s.requests.length > 1 ? `[请求${ri + 1}] ` : '') + (r.audit.reasons || []).join('；');
-                }).filter(Boolean).join('；'))
-                    || (status === '通过' ? '通过'
-                        : (s.audit.blockedFrom ? `同手机号其他提交需人工处理（${s.audit.blockedFrom}）` : status));
+                const reasonStr = buildSuikaSummaryReason(s, { html: false });
                 return [s.code, s.nickname || '', s.phone || '', s.requests.length, inStr, outStr, status, reasonStr, s.submitTime || ''];
             });
 
@@ -3344,23 +3718,21 @@
         }
 
         // 构建碎卡审核结果 sheets（供来豹接龙查询表导出按开关并入，与「导出审核结果Excel」同源同列）
-        function buildSuikaResultSheets(wb) {
+        // async + 分片让出主线程：勾选「包含碎卡审核结果」时避免大数据量同步构建阻塞页面/下载（问题4修复）
+        async function buildSuikaResultSheets(wb) {
             const rows = buildSuikaRequestRows();
             const byStatus = { '通过': [], '未找到用户': [], '需人工处理': [] };
             rows.forEach(r => { (byStatus[r.audit.type] || byStatus['需人工处理']).push(r); });
+            await new Promise(res => setTimeout(res, 0));
 
             // 提交级汇总 sheet（整体判定口径）
             const summaryHeaders = ['提交编号', '昵称', '手机号', '请求数', '换入汇总', '换出汇总', '审核结果', '原因汇总', '提交时间'];
             const summaryData = suikaSubmissions.map(s => {
-                const status = s.audit.status || (s.audit.pass ? '通过' : '需人工处理');
-                const inStr = s.requests.map(r => r.audit.inCard ? (r.audit.inCard + (r.audit.inQty > 1 ? 'x' + r.audit.inQty : '')) : (r.inCard || '（空）')).join('、');
+                const sAudit = s.audit || { pass: false, status: '需人工处理' };
+                const status = sAudit.status || (sAudit.pass ? '通过' : '需人工处理');
+                const inStr = s.requests.map(r => { const ra = r.audit || {}; return ra.inCard ? (ra.inCard + ((ra.inQty || 0) > 1 ? 'x' + ra.inQty : '')) : (r.inCard || '（空）'); }).join('、');
                 const outStr = s.requests.map(r => r.outCards.map(o => o.card + ((o.qty || 0) > 1 ? 'x' + o.qty : '')).join('、')).join(' ； ');
-                const reasonStr = (s.requests.map((r, ri) => {
-                    if (r.audit.pass) return '';
-                    return (s.requests.length > 1 ? `[请求${ri + 1}] ` : '') + (r.audit.reasons || []).join('；');
-                }).filter(Boolean).join('；'))
-                    || (status === '通过' ? '通过'
-                        : (s.audit.blockedFrom ? `同手机号其他提交需人工处理（${s.audit.blockedFrom}）` : status));
+                const reasonStr = buildSuikaSummaryReason(s, { html: false });
                 return [s.code, s.nickname || '', s.phone || '', s.requests.length, inStr, outStr, status, reasonStr, s.submitTime || ''];
             });
 
@@ -3372,16 +3744,30 @@
             const notFoundData = byStatus['未找到用户'].map(r => [r.code, r.nickname, r.phone, r.orderNo, r.ri, r.inCard, r.outStr, r.audit.reasons.join('；'), r.submitTime]);
             const handleData = byStatus['需人工处理'].map(r => [r.code, r.nickname, r.phone, r.orderNo, r.ri, r.audit.type, r.inCard, r.inQty, r.outStr, r.totalOut, r.audit.reasons.join('；'), r.submitTime]);
 
-            const mkSheet = (name, headers, data, wideIdx) => {
+            const mkSheet = async (name, headers, data, wideIdx) => {
+                // 数据量较大时分片让出主线程（每 2000 行让一次）
+                for (let i = 0; i < data.length; i += 2000) {
+                    await new Promise(res => setTimeout(res, 0));
+                }
                 const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
                 ws['!cols'] = headers.map((h, i) => ({ wch: (wideIdx && wideIdx.indexOf(i) >= 0) ? 60 : 16 }));
                 XLSX.utils.book_append_sheet(wb, ws, name);
             };
-            mkSheet('提交级汇总', summaryHeaders, summaryData, [4, 5, 7]);
-            mkSheet('通过审核', passHeaders, passData, [6]);
-            mkSheet('未找到用户', notFoundHeaders, notFoundData, [6, 7]);
-            mkSheet('需人工处理', handleHeaders, handleData, [8, 10]);
-            mkSheet('碎卡兑换获得卡汇总', ['卡面编号', '稀有度', '获得张数', '占比'], buildSuikaGainSummary());
+            await mkSheet('提交级汇总', summaryHeaders, summaryData, [4, 5, 7]);
+            await mkSheet('通过审核', passHeaders, passData, [6]);
+            await mkSheet('未找到用户', notFoundHeaders, notFoundData, [6, 7]);
+            await mkSheet('需人工处理', handleHeaders, handleData, [8, 10]);
+            await mkSheet('碎卡兑换获得卡汇总', ['卡面编号', '稀有度', '获得张数', '占比'], buildSuikaGainSummary());
+            // 修改与放行记录 Sheet（复用修改记录+人工放行数据；无记录时放一行说明文字）
+            // 兼容来豹导出：exportLaibaoOnly 已在同一 wb 预添加「修改与放行记录」，此处重复添加会触发
+            // SheetJS "Worksheet with name already exists!" 异常并中断导出，故先检查重名再添加
+            if (wb.SheetNames.indexOf('修改与放行记录') < 0) {
+                const { headers, data } = buildSuikaEditLogSheet();
+                const rows = data.length > 0 ? data : [['（暂无修改或放行记录）', '', '', '', '', '', '']];
+                const wsLog = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+                wsLog['!cols'] = [{ wch: 14 }, { wch: 18 }, { wch: 16 }, { wch: 12 }, { wch: 60 }, { wch: 24 }, { wch: 20 }];
+                XLSX.utils.book_append_sheet(wb, wsLog, '修改与放行记录');
+            }
         }
 
         // 导出未匹配用户清单（独立按钮，即"未找到用户"Sheet）
@@ -3396,6 +3782,412 @@
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, '未匹配用户清单');
             XLSX.writeFile(wb, getTimestampFilename('碎卡未匹配用户清单'));
+        }
+
+        // ---------- 导出修改记录（D：客服修改留痕 + 人工放行记录，单Sheet） ----------
+        // 共享数据：生成"修改与放行记录"Sheet 的行数据（导出修改记录 / 来豹接龙表 / 碎卡审核结果导出共用）
+        function buildSuikaEditLogSheet() {
+            const headers = ['提交编号', '昵称', '手机号', '操作类型', '修改内容', '修改备注', '修改时间'];
+            const data = [];
+            (suikaSubmissions || []).forEach(s => {
+                if (s.manuallyEdited) {
+                    const content = ((s.editedContent || []).join('；')) || '（未记录逐字段差异）';
+                    data.push([s.code, s.nickname || '', s.phone || '', '修改', content, s.editedNote || '', s.editedAt || '']);
+                }
+                (s.requests || []).forEach((r, ri) => {
+                    if (r.manuallyEdited) {
+                        const content = ((r.editedContent || []).join('；')) || '（未记录逐字段差异）';
+                        data.push([s.code, s.nickname || '', s.phone || '', '修改', content, r.editedNote || '', r.editedAt || '']);
+                    }
+                    if (r.audit && r.audit.manuallyReleased) {
+                        const content = '人工放行请求 ' + (ri + 1) + '：' + (r.audit.inCard || r.inCard || '') + ((r.audit.inQty || 0) > 1 ? 'x' + r.audit.inQty : '');
+                        data.push([s.code, s.nickname || '', s.phone || '', '人工放行', content, r.releasedNote || '', r.audit.releasedAt || '']);
+                    }
+                });
+            });
+            return { headers, data };
+        }
+        function exportSuikaEditLog() {
+            if (!suikaSubmissions || suikaSubmissions.length === 0) { alert('请先上传并审核碎卡兑换表'); return; }
+            const { headers, data } = buildSuikaEditLogSheet();
+            if (data.length === 0) { alert('暂无修改或放行记录'); return; }
+            const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
+            ws['!cols'] = [{ wch: 14 }, { wch: 18 }, { wch: 16 }, { wch: 12 }, { wch: 60 }, { wch: 24 }, { wch: 20 }];
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, '修改与放行记录');
+            XLSX.writeFile(wb, getTimestampFilename('碎卡修改与放行记录'));
+        }
+
+        // ---------- 导出碎卡来豹接龙表（全量+分类，供活动方查看数据制作小卡发货） ----------
+        function exportSuikaLaibao() {
+            if (!suikaSubmissions || suikaSubmissions.length === 0) { alert('请先上传并审核碎卡兑换表'); return; }
+            const phoneToAccounts = buildSuikaPhoneToAccounts();
+            // 提交级行（全部提交 / 未找到用户 / 需人工处理 共用，状态列按提交整体判定口径）
+            const allHeaders = ['编号', '昵称', '收件人姓名', '手机号', '订单号', '提交时间', '换入卡(合并展示)', '换出卡明细(合并展示)', '审核状态', '原因', '备注'];
+            const allData = suikaSubmissions.map(s => {
+                const sAudit = s.audit || { pass: false, status: '需人工处理' };
+                const status = sAudit.status || (sAudit.pass ? '通过' : '需人工处理');
+                const inStr = s.requests.map(r => { const ra = r.audit || {}; return ra.inCard ? (ra.inCard + ((ra.inQty || 0) > 1 ? 'x' + ra.inQty : '')) : (r.inCard || '（空）'); }).join('、');
+                const outStr = s.requests.map(r => r.outCards.map(o => o.card + ((o.qty || 0) > 1 ? 'x' + o.qty : '')).join('、')).join(' ； ');
+                const reasonStr = buildSuikaSummaryReason(s, { html: false })
+                    || (status === '通过' ? '通过' : (s.audit.blockedFrom ? `同手机号其他提交需人工处理（${s.audit.blockedFrom}）` : status));
+                return [s.code, s.nickname || '', s.name || '', s.phone || '', s.orderNo || '', s.submitTime || '', inStr, outStr, status, reasonStr, suikaRemarkOf(s, phoneToAccounts)];
+            });
+            // 通过审核：每请求一行（发货清单）
+            const passHeaders = ['收件人姓名', '手机号', '换入卡', '换入张数', '换出卡明细', '编号', '备注'];
+            const passData = [];
+            suikaSubmissions.forEach(s => {
+                const remark = suikaRemarkOf(s, phoneToAccounts);
+                s.requests.forEach(r => {
+                    if (r.audit.type !== '通过') return;
+                    passData.push([
+                        s.name || s.nickname || '', s.phone || '',
+                        r.audit.inCard || r.inCard || '', r.audit.inQty > 0 ? r.audit.inQty : 1,
+                        r.outCards.map(o => o.card + ((o.qty || 0) > 1 ? 'x' + o.qty : '')).join('、'),
+                        s.code, remark
+                    ]);
+                });
+            });
+            // 获得卡汇总：换入卡卡面 / 兑换数量(张) / 涉及用户数（同一用户多张同卡只计一次）
+            const gainMap = {};
+            const gainUserCounts = {};
+            const gainUsers = new Set();
+            suikaSubmissions.forEach(s => {
+                const seen = {};
+                s.requests.forEach(r => {
+                    if (r.audit.type !== '通过') return;
+                    const card = normalizeCardId(r.audit.inCard);
+                    if (!card) return;
+                    const qty = (r.audit.inQty > 0 ? r.audit.inQty : 1);
+                    gainMap[card] = (gainMap[card] || 0) + qty;
+                    if (s.user && s.user.wechat) {
+                        gainUsers.add(s.user.wechat);
+                        if (!seen[card]) { seen[card] = true; gainUserCounts[card] = (gainUserCounts[card] || 0) + 1; }
+                    }
+                });
+            });
+            const gainData = sortCardSummaryRows(Object.keys(gainMap).map(card => ({ card, qty: gainMap[card] }))).map(x => [x.card, x.qty, gainUserCounts[x.card] || 0]);
+            let totalQty = 0;
+            gainData.forEach(x => { totalQty += x[1]; });
+            if (gainData.length === 0) gainData.push(['（无通过记录）', 0, 0]);
+            gainData.push(['合计', totalQty, gainUsers.size]);
+            const wb = XLSX.utils.book_new();
+            const mkSheet = (name, headers, data, wideIdx) => {
+                const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
+                ws['!cols'] = headers.map((h, i) => ({ wch: (wideIdx && wideIdx.indexOf(i) >= 0) ? 50 : 16 }));
+                XLSX.utils.book_append_sheet(wb, ws, name);
+            };
+            mkSheet('全部提交', allHeaders, allData, [6, 7, 9]);
+            mkSheet('通过审核', passHeaders, passData, [4]);
+            mkSheet('未找到用户', allHeaders, allData.filter(r => r[8] === '未找到用户'), [6, 7, 9]);
+            mkSheet('需人工处理', allHeaders, allData.filter(r => r[8] === '需人工处理'), [6, 7, 9]);
+            mkSheet('获得卡汇总', ['换入卡卡面', '兑换数量(张)', '涉及用户数'], gainData, []);
+            XLSX.writeFile(wb, getTimestampFilename('碎卡来豹接龙表'));
+        }
+
+        // 同手机号多账号映射（基于全量 userData，复用 exportLaibaoSheet 逻辑）
+        function buildSuikaPhoneToAccounts() {
+            const phoneToAccounts = {};
+            userData.forEach(u => {
+                const p = normalizePhone(String(u.phone || '').trim());
+                if (!p) return;
+                const acct = String(u.wechat || '').trim();
+                if (!acct) return;
+                if (!phoneToAccounts[p]) phoneToAccounts[p] = [];
+                if (phoneToAccounts[p].indexOf(acct) < 0) phoneToAccounts[p].push(acct);
+            });
+            return phoneToAccounts;
+        }
+
+        // 碎卡备注列：海外号(非11位国内手机号) / 同手机号多账号 / 客服已修改
+        function suikaRemarkOf(s, phoneToAccounts) {
+            let remark = '';
+            const phone = String(s.phone || '').trim();
+            if (phone && !(phone.length === 11 && phone.startsWith('1') && /^\d+$/.test(phone))) {
+                remark = '⚠ 海外手机号';
+            }
+            const phoneKey = normalizePhone(phone);
+            const phoneAccts = phoneKey ? (phoneToAccounts[phoneKey] || []) : [];
+            if (phoneAccts.length > 1) {
+                const acct = s.user && s.user.wechat ? String(s.user.wechat).trim() : '';
+                const others = phoneAccts.filter(a => a !== acct);
+                if (others.length > 0) {
+                    remark += (remark ? '；' : '') + `⚠ 同手机号多账号：${others.join('；')}（数据分散，请合并查看）`;
+                }
+            }
+            if (s.manuallyEdited || (s.requests || []).some(r => r.manuallyEdited)) {
+                remark += (remark ? '；' : '') + '客服已修改';
+            }
+            return remark;
+        }
+
+        // ---------- 重新审核全部提交（客服修改后调用；rematchSet 为需要重新匹配用户的提交编号集合） ----------
+        function reauditAllSubmissions(rematchSet) {
+            if (!suikaSubmissions || suikaSubmissions.length === 0) return;
+            const mergeOn = document.getElementById('suikaMergePhoneCb') ? document.getElementById('suikaMergePhoneCb').checked : false;
+            const multiOn = document.getElementById('suikaMergeMultiCb') ? document.getElementById('suikaMergeMultiCb').checked : true;
+            suikaSubmissions.forEach(s => {
+                if (rematchSet && rematchSet.has(String(s.code))) {
+                    const matched = findUserByPhoneOrderDetail(s.phone, s.orderNo, s.nickname, s.name, mergeOn ? { mergeByPhone: true } : {});
+                    s.user = matched.user;
+                    s.userMatch = matched;
+                }
+            });
+            const toTime = v => {
+                const t = Date.parse(String(v || '').replace(/[./]/g, '-').replace(/(\d{4})-(\d{1,2})-(\d{1,2})/, '$1-$2-$3'));
+                return isNaN(t) ? 0 : t;
+            };
+            if (multiOn) {
+                // 按手机号聚合所有提交，合并为一个整体核算（与 suikaAnalyzeBtn 审核口径一致）
+                const groupByPhone = {};
+                suikaSubmissions.forEach(s => {
+                    const key = normalizePhone(s.phone) || '__nophone__';
+                    if (!groupByPhone[key]) groupByPhone[key] = [];
+                    groupByPhone[key].push(s);
+                });
+                Object.keys(groupByPhone).forEach(key => {
+                    const list = groupByPhone[key].sort((a, b) => toTime(a.submitTime) - toTime(b.submitTime));
+                    const firstMatched = list.find(s => s.user);
+                    const user = firstMatched ? firstMatched.user : null;
+                    const triedKeys = (firstMatched && firstMatched.userMatch && firstMatched.userMatch.triedKeys) ? firstMatched.userMatch.triedKeys : [];
+                    auditSubmissionsGrouped(list, user, triedKeys);
+                });
+            } else {
+                // 原口径：跨提交抽数累计——同用户按提交时间先后审核，通过提交消耗的抽数累计扣减
+                const groupByUser = {};
+                suikaSubmissions.forEach(s => {
+                    const key = s.user ? s.user.wechat : '__nouser__';
+                    if (!groupByUser[key]) groupByUser[key] = [];
+                    groupByUser[key].push(s);
+                });
+                Object.keys(groupByUser).forEach(key => {
+                    groupByUser[key].sort((a, b) => toTime(a.submitTime) - toTime(b.submitTime));
+                    let used = 0;
+                    groupByUser[key].forEach(s => {
+                        if (!s.user) { s.audit = auditSubmission(s); return; }
+                        const remaining = Math.max(0, s.user.totalDraws - used);
+                        s.audit = auditSubmission(s, remaining);
+                        if (s.audit.pass) used += (s.audit.usedDraws || 0);
+                    });
+                });
+            }
+            suikaAuditMap = {};
+            suikaSubmissions.forEach(s => {
+                if (s.user) {
+                    if (!suikaAuditMap[s.user.wechat]) suikaAuditMap[s.user.wechat] = [];
+                    suikaAuditMap[s.user.wechat].push(s);
+                }
+            });
+            renderSuikaResults();
+        }
+
+        // ---------- 客服手动修改（弹窗编辑 + 重新审核） ----------
+        function escHtml(v) {
+            return String(v === undefined || v === null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+        function escAttr(v) {
+            return String(v === undefined || v === null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+        function suikaOpenEditModal(html, code, ri) {
+            suikaCloseEditModal();
+            const div = document.createElement('div');
+            div.id = 'suikaEditModalWrap';
+            div.setAttribute('data-code', String(code));
+            if (ri !== undefined && ri !== null) div.setAttribute('data-ri', String(ri));
+            div.innerHTML = html;
+            document.body.appendChild(div);
+        }
+        function suikaCloseEditModal() {
+            const el = document.getElementById('suikaEditModalWrap');
+            if (el) el.remove();
+        }
+        function suikaModalShell(titleHtml, bodyHtml, saveOnclick, closeFn, modalWidth) {
+            const closeCode = closeFn || 'suikaCloseEditModal()';
+            const saveBtn = saveOnclick
+                ? `<button type="button" onclick="${saveOnclick}" style="padding:6px 18px;border:none;border-radius:8px;background:#2563eb;color:#fff;font-size:13px;cursor:pointer;">保存并重新审核</button>`
+                : '';
+            return `<div style="position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;" onclick="if(event.target===this){${closeCode}}">
+                <div style="background:#fff;border-radius:14px;max-width:${modalWidth || 640}px;width:100%;max-height:86vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,0.25);padding:18px 22px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                        <span style="font-weight:bold;font-size:15px;">${titleHtml}</span>
+                        <button type="button" onclick="${closeCode}" style="border:none;background:#f0f0f0;width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:14px;line-height:1;">✕</button>
+                    </div>
+                    ${bodyHtml}
+                    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
+                        <button type="button" onclick="${closeCode}" style="padding:6px 18px;border:1px solid #ccc;border-radius:8px;background:#fff;color:#555;font-size:13px;cursor:pointer;">取消</button>
+                        ${saveBtn}
+                    </div>
+                </div>
+            </div>`;
+        }
+        // 功能2a：请求明细行「修改」弹窗（编辑换入卡/张数/换出卡清单）
+        function suikaOpenEditReqModal(code, ri) {
+            const sub = suikaSubmissions.find(x => String(x.code) === String(code));
+            if (!sub || !sub.requests[ri]) return;
+            const req = sub.requests[ri];
+            const inCard = req.audit.inCard || req.inCard || '';
+            const inQty = req.audit.inQty > 0 ? req.audit.inQty : 1;
+            const outRows = (req.outCards || []).map(o =>
+                `<div class="suikaOutRow" style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+                    <input type="text" class="suikaOutCard" value="${escAttr(o.card)}" placeholder="卡面编号，如 SR12" style="flex:1;min-width:0;padding:6px 10px;border:1px solid #ccc;border-radius:8px;font-size:13px;box-sizing:border-box;">
+                    <input type="number" class="suikaOutQty" value="${o.qty || 1}" min="1" style="width:80px;padding:6px 10px;border:1px solid #ccc;border-radius:8px;font-size:13px;box-sizing:border-box;">
+                    <button type="button" onclick="suikaRemoveOutRow(this)" style="padding:4px 10px;border:1px solid #dc2626;border-radius:8px;background:#fef2f2;color:#dc2626;font-size:12px;cursor:pointer;">删除</button>
+                </div>`).join('');
+            const bodyHtml = `
+                <div style="font-size:12px;font-weight:bold;color:#20517d;margin-bottom:6px;">提交信息</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+                    <div><div style="font-size:12px;color:#666;margin-bottom:4px;">昵称</div><input type="text" id="suikaEditNick" value="${escAttr(sub.nickname || '')}" style="width:100%;padding:6px 10px;border:1px solid #ccc;border-radius:8px;font-size:13px;box-sizing:border-box;"></div>
+                    <div><div style="font-size:12px;color:#666;margin-bottom:4px;">收件人姓名</div><input type="text" id="suikaEditName" value="${escAttr(sub.name || '')}" style="width:100%;padding:6px 10px;border:1px solid #ccc;border-radius:8px;font-size:13px;box-sizing:border-box;"></div>
+                    <div><div style="font-size:12px;color:#666;margin-bottom:4px;">手机号</div><input type="text" id="suikaEditPhone" value="${escAttr(sub.phone || '')}" style="width:100%;padding:6px 10px;border:1px solid #ccc;border-radius:8px;font-size:13px;box-sizing:border-box;"></div>
+                    <div><div style="font-size:12px;color:#666;margin-bottom:4px;">订单号</div><input type="text" id="suikaEditOrder" value="${escAttr(sub.orderNo || '')}" style="width:100%;padding:6px 10px;border:1px solid #ccc;border-radius:8px;font-size:13px;box-sizing:border-box;"></div>
+                </div>
+                <div style="font-size:12px;font-weight:bold;color:#20517d;margin-bottom:6px;">请求信息</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+                    <div><div style="font-size:12px;color:#666;margin-bottom:4px;">换入卡</div><input type="text" id="suikaEditInCard" value="${escAttr(inCard)}" placeholder="如 SR12" style="width:100%;padding:6px 10px;border:1px solid #ccc;border-radius:8px;font-size:13px;box-sizing:border-box;"></div>
+                    <div><div style="font-size:12px;color:#666;margin-bottom:4px;">换入张数</div><input type="number" id="suikaEditInQty" value="${inQty}" min="1" style="width:100%;padding:6px 10px;border:1px solid #ccc;border-radius:8px;font-size:13px;box-sizing:border-box;"></div>
+                </div>
+                <div style="font-size:12px;color:#666;margin-bottom:4px;">换出卡清单（每行：卡面 + 张数）</div>
+                <div id="suikaEditOutRows">${outRows || '<div style="color:#999;font-size:12px;">暂无换出卡，请点击下方按钮添加</div>'}</div>
+                <button type="button" onclick="suikaAddOutRow()" style="margin:6px 0 12px;padding:4px 12px;border:1px solid #2563eb;border-radius:8px;background:#eff6ff;color:#2563eb;font-size:12px;cursor:pointer;">+ 添加一行</button>
+                <div style="font-size:12px;color:#666;margin-bottom:4px;">修改原因备注</div>
+                <textarea id="suikaEditNote" rows="2" style="width:100%;padding:6px 10px;border:1px solid #ccc;border-radius:8px;font-size:13px;box-sizing:border-box;" placeholder="填写修改原因，便于追溯"></textarea>`;
+            suikaOpenEditModal(suikaModalShell(`✏️ 修改提交与请求（提交 ${escHtml(code)} · 请求 ${ri + 1}/${sub.requests.length}）`, bodyHtml, 'suikaSaveEditReq()'), code, ri);
+        }
+        function suikaAddOutRow() {
+            const wrap = document.getElementById('suikaEditOutRows');
+            if (!wrap) return;
+            wrap.querySelectorAll('div[style*="暂无换出卡"]').forEach(el => el.remove());
+            const row = document.createElement('div');
+            row.className = 'suikaOutRow';
+            row.style.cssText = 'display:flex;gap:6px;align-items:center;margin-bottom:6px;';
+            row.innerHTML = `<input type="text" class="suikaOutCard" placeholder="卡面编号，如 SR12" style="flex:1;min-width:0;padding:6px 10px;border:1px solid #ccc;border-radius:8px;font-size:13px;box-sizing:border-box;">
+                <input type="number" class="suikaOutQty" value="1" min="1" style="width:80px;padding:6px 10px;border:1px solid #ccc;border-radius:8px;font-size:13px;box-sizing:border-box;">
+                <button type="button" onclick="suikaRemoveOutRow(this)" style="padding:4px 10px;border:1px solid #dc2626;border-radius:8px;background:#fef2f2;color:#dc2626;font-size:12px;cursor:pointer;">删除</button>`;
+            wrap.appendChild(row);
+        }
+        function suikaRemoveOutRow(btn) {
+            const wrap = document.getElementById('suikaEditOutRows');
+            if (wrap) {
+                const row = btn.closest('.suikaOutRow');
+                if (row) row.remove();
+                if (wrap.children.length === 0) wrap.innerHTML = '<div style="color:#999;font-size:12px;">暂无换出卡，请点击下方按钮添加</div>';
+            }
+        }
+        function suikaSaveEditReq() {
+            const wrap = document.getElementById('suikaEditModalWrap');
+            if (!wrap) return;
+            const code = wrap.getAttribute('data-code');
+            const ri = parseInt(wrap.getAttribute('data-ri'), 10);
+            const sub = suikaSubmissions.find(x => String(x.code) === String(code));
+            if (!sub || !sub.requests[ri]) { alert('未找到目标提交/请求'); return; }
+            const req = sub.requests[ri];
+            // ---- 提交信息（昵称/收件人姓名/手机号/订单号，变更后重新匹配用户）----
+            const oldVals = { nickname: sub.nickname || '', name: sub.name || '', phone: sub.phone || '', orderNo: sub.orderNo || '' };
+            const newVals = {
+                nickname: String(document.getElementById('suikaEditNick').value || '').trim(),
+                name: String(document.getElementById('suikaEditName').value || '').trim(),
+                phone: String(document.getElementById('suikaEditPhone').value || '').trim(),
+                orderNo: String(document.getElementById('suikaEditOrder').value || '').trim()
+            };
+            const subContent = [];
+            const subLabels = { nickname: '昵称', name: '收件人姓名', phone: '手机号', orderNo: '订单号' };
+            Object.keys(subLabels).forEach(k => {
+                if (oldVals[k] !== newVals[k]) subContent.push(subLabels[k] + '：' + (oldVals[k] || '（空）') + ' → ' + (newVals[k] || '（空）'));
+            });
+            const subChanged = subContent.length > 0;
+            // ---- 请求信息（换入卡/张数/换出卡清单/备注）----
+            const inCard = String(document.getElementById('suikaEditInCard').value || '').trim();
+            const inQty = parseInt(document.getElementById('suikaEditInQty').value, 10);
+            const note = String(document.getElementById('suikaEditNote').value || '').trim();
+            const inNorm = normalizeCardId(inCard);
+            if (!inNorm) { alert('换入卡面无法识别，请填写有效卡面编号（如 SR12 / SSR8）'); return; }
+            if (!(inQty > 0)) { alert('换入张数需 ≥ 1'); return; }
+            const rows = Array.from(document.querySelectorAll('#suikaEditOutRows .suikaOutRow'));
+            const outCards = [];
+            for (const rowEl of rows) {
+                const card = String(rowEl.querySelector('.suikaOutCard').value || '').trim();
+                const qty = parseInt(rowEl.querySelector('.suikaOutQty').value, 10);
+                const norm = normalizeCardId(card);
+                if (!norm || !(qty > 0)) { alert('换出卡清单每行需填写有效卡面编号且张数 ≥ 1'); return; }
+                outCards.push({ card: norm, qty });
+            }
+            if (outCards.length === 0) { alert('换出卡清单至少需一行'); return; }
+            // 留痕：修改前→修改后逐字段记录（导出修改记录用）
+            const editedContent = [];
+            if (String(req.inCard || '') !== inNorm) editedContent.push('换入卡面：' + (req.inCard || '（空）') + ' → ' + inNorm);
+            if (req.inQty !== inQty) editedContent.push('换入张数：' + (req.inQty || '') + ' → ' + inQty);
+            const oldOutStr = (req.outCards || []).map(o => o.card + ((o.qty || 0) > 1 ? 'x' + o.qty : '')).join('、');
+            const newOutStr = outCards.map(o => o.card + (o.qty > 1 ? 'x' + o.qty : '')).join('、');
+            if (oldOutStr !== newOutStr) editedContent.push('换出卡明细：' + (oldOutStr || '（空）') + ' → ' + (newOutStr || '（空）'));
+            req.inCard = inNorm;
+            req.inQty = inQty;
+            req.outCards = outCards;
+            req.outRaw = outCards.map(o => o.card + (o.qty > 1 ? 'x' + o.qty : '')).join('、');
+            req.outQtyRaw = '';
+            req.review = false;
+            delete req.warning;
+            req.manuallyEdited = true;
+            req.editedNote = note || '';
+            req.editedAt = new Date().toLocaleString('zh-CN', { hour12: false });
+            req.editedContent = (req.editedContent || []).concat(editedContent);
+            // 提交字段有变更：应用新值 + 留痕 + 重新匹配用户（findUserByPhoneOrderDetail）
+            if (subChanged) {
+                sub.nickname = newVals.nickname;
+                sub.name = newVals.name;
+                sub.phone = newVals.phone;
+                sub.orderNo = newVals.orderNo;
+                sub.manuallyEdited = true;
+                sub.editedNote = (sub.editedNote || '') ? sub.editedNote + '；' + note : note;
+                sub.editedAt = new Date().toLocaleString('zh-CN', { hour12: false });
+                sub.editedContent = (sub.editedContent || []).concat(subContent);
+                const mergeOn = document.getElementById('suikaMergePhoneCb') ? document.getElementById('suikaMergePhoneCb').checked : false;
+                const matched = findUserByPhoneOrderDetail(sub.phone, sub.orderNo, sub.nickname, sub.name, mergeOn ? { mergeByPhone: true } : {});
+                sub.user = matched.user;
+                sub.userMatch = matched;
+            }
+            suikaCloseEditModal();
+            reauditAllSubmissions(subChanged ? new Set([String(code)]) : undefined);
+            alert(`已保存并重新审核：提交 ${code} 请求 ${ri + 1} → ${req.audit.type}`);
+        }
+        // 功能2b：提交汇总行「修改」弹窗（编辑昵称/姓名/手机号/订单号）
+        function suikaOpenEditSubModal(code) {
+            const sub = suikaSubmissions.find(x => String(x.code) === String(code));
+            if (!sub) return;
+            const bodyHtml = `
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+                    <div><div style="font-size:12px;color:#666;margin-bottom:4px;">昵称</div><input type="text" id="suikaEditNick" value="${escAttr(sub.nickname || '')}" style="width:100%;padding:6px 10px;border:1px solid #ccc;border-radius:8px;font-size:13px;box-sizing:border-box;"></div>
+                    <div><div style="font-size:12px;color:#666;margin-bottom:4px;">收件人姓名</div><input type="text" id="suikaEditName" value="${escAttr(sub.name || '')}" style="width:100%;padding:6px 10px;border:1px solid #ccc;border-radius:8px;font-size:13px;box-sizing:border-box;"></div>
+                    <div><div style="font-size:12px;color:#666;margin-bottom:4px;">手机号</div><input type="text" id="suikaEditPhone" value="${escAttr(sub.phone || '')}" style="width:100%;padding:6px 10px;border:1px solid #ccc;border-radius:8px;font-size:13px;box-sizing:border-box;"></div>
+                    <div><div style="font-size:12px;color:#666;margin-bottom:4px;">订单号</div><input type="text" id="suikaEditOrder" value="${escAttr(sub.orderNo || '')}" style="width:100%;padding:6px 10px;border:1px solid #ccc;border-radius:8px;font-size:13px;box-sizing:border-box;"></div>
+                </div>
+                <div style="font-size:12px;color:#666;margin-bottom:4px;">修改原因备注</div>
+                <textarea id="suikaEditNote" rows="2" style="width:100%;padding:6px 10px;border:1px solid #ccc;border-radius:8px;font-size:13px;box-sizing:border-box;" placeholder="填写修改原因，便于追溯"></textarea>`;
+            suikaOpenEditModal(suikaModalShell(`✏️ 修改提交信息（编号 ${escHtml(code)}）`, bodyHtml, 'suikaSaveEditSub()'), code);
+        }
+        function suikaSaveEditSub() {
+            const wrap = document.getElementById('suikaEditModalWrap');
+            if (!wrap) return;
+            const code = wrap.getAttribute('data-code');
+            const sub = suikaSubmissions.find(x => String(x.code) === String(code));
+            if (!sub) { alert('未找到目标提交'); return; }
+            // 留痕：修改前→修改后逐字段记录（导出修改记录用）
+            const oldVals = { nickname: sub.nickname || '', name: sub.name || '', phone: sub.phone || '', orderNo: sub.orderNo || '' };
+            sub.nickname = String(document.getElementById('suikaEditNick').value || '').trim();
+            sub.name = String(document.getElementById('suikaEditName').value || '').trim();
+            sub.phone = String(document.getElementById('suikaEditPhone').value || '').trim();
+            sub.orderNo = String(document.getElementById('suikaEditOrder').value || '').trim();
+            const editedContent = [];
+            const labels = { nickname: '昵称', name: '收件人姓名', phone: '手机号', orderNo: '订单号' };
+            Object.keys(labels).forEach(k => {
+                if (oldVals[k] !== sub[k]) editedContent.push(labels[k] + '：' + (oldVals[k] || '（空）') + ' → ' + (sub[k] || '（空）'));
+            });
+            sub.manuallyEdited = true;
+            sub.editedNote = String(document.getElementById('suikaEditNote').value || '').trim();
+            sub.editedAt = new Date().toLocaleString('zh-CN', { hour12: false });
+            sub.editedContent = (sub.editedContent || []).concat(editedContent);
+            suikaCloseEditModal();
+            reauditAllSubmissions(new Set([String(code)]));
+            alert(`已保存并重新匹配审核：提交 ${code} → ${sub.audit.status}`);
         }
 
         // ---------- 集赞兑换表上传 ----------
@@ -3742,28 +4534,21 @@
                 ? `<table style="width:100%;border-collapse:collapse;margin-top:8px;"><thead><tr style="background:#eef4fa;">${merged ? '<th style="padding:8px 10px;font-size:12px;text-align:left;">账号</th>' : ''}<th style="padding:8px 10px;font-size:12px;text-align:left;">#</th><th style="padding:8px 10px;font-size:12px;text-align:left;">补邮订单号</th><th style="padding:8px 10px;font-size:12px;text-align:left;">时间</th><th style="padding:8px 10px;font-size:12px;">补邮份数</th></tr></thead><tbody>${buyouRows.join('')}</tbody></table>`
                 : '';
             return `
-                <div style="position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;" onclick="if(event.target===this)closeOrderModal()">
-                    <div style="background:#fff;border-radius:14px;max-width:760px;width:100%;max-height:82vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,0.25);">
-                        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-bottom:1px solid #f0f0f0;position:sticky;top:0;background:#fff;border-radius:14px 14px 0 0;">
-                            <div>
-                                <span style="font-weight:bold;font-size:15px;">📦 订单详情${merged ? `<span style="display:inline-block;background:#eef2ff;color:#4f46e5;padding:1px 8px;border-radius:10px;font-size:11px;margin-left:6px;">已合并${(user.mergedFrom || []).length}个账号</span>` : ''}</span>
-                                <span style="margin-left:8px;font-size:12px;color:#999;">${esc(user.wechat || '-')}${merged ? ' 等 ' + (user.mergedFrom || []).length + ' 个账号' : ''}（总抽数 ${user.totalDraws || 0}）</span>
-                            </div>
-                            <button onclick="closeOrderModal()" style="border:none;background:#f0f0f0;width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:14px;line-height:1;">✕</button>
-                        </div>
-                        <div style="padding:16px 20px;">
-                            <div style="font-size:12px;color:#20517d;font-weight:bold;margin-bottom:6px;">订单明细（${orderDraws.length} 单）</div>
-                            ${orderBody}
-                            ${buyouBody ? `<div style="font-size:12px;color:#20517d;font-weight:bold;margin-top:12px;">补邮订单（${buyouOrders.length} 单）</div>${buyouBody}` : ''}
-                        </div>
-                    </div>
+                <div>
+                    <div style="font-size:12px;color:#20517d;font-weight:bold;margin-bottom:6px;">订单明细（${orderDraws.length} 单）</div>
+                    ${orderBody}
+                    ${buyouBody ? `<div style="font-size:12px;color:#20517d;font-weight:bold;margin-top:12px;">补邮订单（${buyouOrders.length} 单）</div>${buyouBody}` : ''}
                 </div>
             `;
         }
         function showOrderModal(user) {
+            if (!user) return;
+            const merged = !!(user._isMerged);
+            const esc = s => String(s === undefined || s === null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const titleHtml = `📦 订单详情${merged ? `<span style="display:inline-block;background:#eef2ff;color:#4f46e5;padding:1px 8px;border-radius:10px;font-size:11px;margin-left:6px;">已合并${(user.mergedFrom || []).length}个账号</span>` : ''}<span style="margin-left:8px;font-size:12px;color:#999;font-weight:normal;">${esc(user.wechat || '-')}${merged ? ' 等 ' + (user.mergedFrom || []).length + ' 个账号' : ''}（总抽数 ${user.totalDraws || 0}）</span>`;
             const div = document.createElement('div');
             div.id = 'orderModalWrap';
-            div.innerHTML = orderModalHtml(user);
+            div.innerHTML = suikaModalShell(titleHtml, orderModalHtml(user), '', 'closeOrderModal()', 760);
             document.body.appendChild(div);
         }
         function closeOrderModal() {
