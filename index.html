@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>抽抽乐订单数据分析 最后更新时间2026.9.2 13:00</title>
+    <title>抽抽乐活动数据审核 最后更新时间2026.9.2 13:00</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <style>
@@ -91,8 +91,8 @@
         .pagination button:disabled { opacity: 0.5; cursor: not-allowed; }
         .pagination span { padding: 0 10px; font-size: 13px; color: #666; }
         
-        .loading { text-align: center; padding: 40px; color: #20517d; }
-        .loading div:first-child { font-size: 36px; animation: spin 1s linear infinite; display: block; margin-bottom: 10px; }
+        .loading { display: flex; align-items: center; gap: 10px; padding: 6px 0; color: #20517d; font-size: 14px; }
+        .loading div:first-child { font-size: 22px; animation: spin 1s linear infinite; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         
         .hidden { display: none; }
@@ -149,9 +149,9 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>📊 抽抽乐订单数据分析</h1>
+            <h1>📋 抽抽乐活动数据审核</h1>
             <div style="font-size:12px;color:#999;margin:-8px 0 14px;">最后更新：2026-09-02 13:00</div>
-            <p>上传Excel文件，自动生成数据分析报告</p>
+            <p>上传订单数据与碎卡兑换接龙表，自动核验兑换资格并生成审核结果</p>
         </div>
 
         <div class="upload-section">
@@ -162,9 +162,12 @@
             </div>
             <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" multiple>
             <button class="btn" id="analyzeBtn" disabled>开始分析</button>
-            <div id="analysisProgressArea" class="hidden" style="margin-top:12px;max-width:420px;">
+            <div id="analysisProgressArea" class="hidden" style="margin-top:12px;width:100%;">
                 <div style="display:flex;justify-content:space-between;font-size:12px;color:#666;margin-bottom:4px;"><span>分析进度</span><span id="analysisProgressText">准备中...</span></div>
                 <div style="height:8px;background:#e5e7eb;border-radius:8px;overflow:hidden;"><div id="analysisProgressBar" style="height:100%;width:0%;background:#2563eb;border-radius:8px;transition:width .15s ease;"></div></div>
+            </div>
+            <div id="loadingSection" class="hidden">
+                <div class="loading"><div>⏳</div><p>正在解析订单数据，请稍候...</p></div>
             </div>
             <div id="fileList" style="margin-top: 15px; color: #666;"></div>
         </div>
@@ -177,7 +180,7 @@
             </div>
             <input type="file" id="suikaFileInput" accept=".xlsx,.xls,.csv">
             <button class="btn" id="suikaAnalyzeBtn" disabled>开始审核</button>
-            <div id="suikaProgressArea" class="hidden" style="margin-top:12px;max-width:420px;">
+            <div id="suikaProgressArea" class="hidden" style="margin-top:12px;width:100%;">
                 <div style="display:flex;justify-content:space-between;font-size:12px;color:#666;margin-bottom:4px;"><span>碎卡审核进度</span><span id="suikaProgressText">准备中...</span></div>
                 <div style="height:8px;background:#e5e7eb;border-radius:8px;overflow:hidden;"><div id="suikaProgressBar" style="height:100%;width:0%;background:#20517d;border-radius:8px;transition:width .15s ease;"></div></div>
             </div>
@@ -446,9 +449,7 @@
             </div>
         </div>
 
-        <div id="loadingSection" class="hidden">
-            <div class="loading"><div>⏳</div><p>正在分析数据，请稍候...</p></div>
-        </div>
+
     </div>
 
     <script>
@@ -2097,19 +2098,45 @@
                 if (!phoneToAccounts[p]) phoneToAccounts[p] = [];
                 if (phoneToAccounts[p].indexOf(acct) < 0) phoneToAccounts[p].push(acct);
             });
-            // 碎卡审核状态映射（按手机号/账号关联，最严口径优先：需人工 > 通过 > 未参与）
+            // 碎卡审核状态映射（按手机号/账号关联，最严口径优先：接龙填写错误 > 需人工 > 通过 > 未参与）
             const suikaStatusMap = {};
+            const suikaStatusRank = k2 => k2 === SUIKA_QTY_ERR_STATUS ? 3 : (k2 === '需人工' ? 2 : (k2 === '通过' ? 1 : 0));
             (suikaSubmissions || []).forEach(s => {
                 const st = s.audit.status || (s.audit.pass ? '通过' : '需人工处理');
-                const key = st === '通过' ? '通过' : '需人工';
+                const key = st === '通过' ? '通过' : (st === SUIKA_QTY_ERR_STATUS ? SUIKA_QTY_ERR_STATUS : '需人工');
                 const sp = normalizePhone(String(s.phone || '').trim());
-                if (sp) { const k = 'p:' + sp; if (!suikaStatusMap[k] || suikaStatusMap[k] !== '需人工') suikaStatusMap[k] = key; }
+                if (sp) { const k = 'p:' + sp; if (suikaStatusRank(key) > suikaStatusRank(suikaStatusMap[k] || '')) suikaStatusMap[k] = key; }
                 const acct = String((s.user && s.user.wechat) || s.nickname || '').trim();
-                if (acct) { const k = 'a:' + acct; if (!suikaStatusMap[k] || suikaStatusMap[k] !== '需人工') suikaStatusMap[k] = key; }
+                if (acct) { const k = 'a:' + acct; if (suikaStatusRank(key) > suikaStatusRank(suikaStatusMap[k] || '')) suikaStatusMap[k] = key; }
             });
+            // 审核原因明细映射（与 suikaStatusMap 同 key 体系）：聚合该手机号/账号下所有未通过提交的自然语言原因，
+            // 不含物理行号与【原始填报参考】（改动v9）；同一提交多个错误逐行列出（\n 分隔）
+            const suikaReasonDetailMap = {};
+            const addReasonDetail = (k, text) => {
+                if (!k || !text) return;
+                if (!suikaReasonDetailMap[k]) suikaReasonDetailMap[k] = [];
+                suikaReasonDetailMap[k].push(text);
+            };
+            (suikaSubmissions || []).forEach(s => {
+                const sAudit = s.audit || {};
+                const sPass = sAudit.pass === true || sAudit.status === '通过' || sAudit.type === '通过';
+                if (sPass) return;
+                let t = buildSuikaSummaryReason(s, { html: false });
+                if (!t || !t.trim()) t = sAudit.status || '需人工处理';
+                const lines = t.split('\n').filter(x => x && x.trim());
+                const text = lines.map(x => '提交 ' + (s.code || '') + '：' + x).join('\n');
+                const sp = normalizePhone(String(s.phone || '').trim());
+                if (sp) addReasonDetail('p:' + sp, text);
+                const acct = String((s.user && s.user.wechat) || s.nickname || '').trim();
+                if (acct) addReasonDetail('a:' + acct, text);
+            });
+            const suikaReasonDetailTextOf = (acct, phone) => {
+                const arr = suikaReasonDetailMap['a:' + acct] || suikaReasonDetailMap['p:' + normalizePhone(phone)] || [];
+                return arr.join('\n');
+            };
             const suikaStatusTextOf = (acct, phone) => {
                 const key = suikaStatusMap['a:' + acct] || suikaStatusMap['p:' + normalizePhone(phone)] || '';
-                return key === '通过' ? '审核通过' : (key === '需人工' ? '需人工审核，请联系微店客服' : '未参与');
+                return key === '通过' ? '审核通过' : (key === '需人工' ? '需人工审核，请联系微店客服' : (key === SUIKA_QTY_ERR_STATUS ? SUIKA_QTY_ERR_STATUS : '未参与'));
             };
             // 审核通过卡面映射（与 suikaStatusMap 同 key 体系：按手机号/账号关联，仅聚合审核通过的请求的换入卡面）
             const suikaPassCardsMap = {};
@@ -2143,7 +2170,7 @@
                 if (!m) return '';
                 return Object.keys(m).map(card => card + '×' + m[card]).join('、');
             };
-            const headers = ['查询码(下单账号)', '下单账号', '收货人手机号', '总抽数', '是否端盒', '超like卡', '全员特典', '宣传集赞礼', '补邮情况', '限时小卡获得', '浪漫疯子获得', '周末活动获得', '终极活动获得', '获得卡片', '个人满抽礼', '碎卡兑换审核状态', '审核通过卡面', '备注'];
+            const headers = ['查询码(下单账号)', '下单账号', '收货人手机号', '总抽数', '是否端盒', '超like卡', '全员特典', '宣传集赞礼', '补邮情况', '限时小卡获得', '浪漫疯子获得', '周末活动获得', '终极活动获得', '获得卡片', '个人满抽礼', '碎卡兑换审核状态', '审核原因明细', '审核通过卡面', '备注'];
             const data = userData.map(u => {
                 // 补邮情况描述：无需补邮 / 已补邮 / 未补邮
                 // 规则：满10抽无需补邮，少于10抽才需要补邮
@@ -2220,6 +2247,7 @@
                     u.items || '',
                     u.milestoneRewards || '',
                     suikaStatusTextOf(wechat, phone),
+                    suikaReasonDetailTextOf(wechat, phone) || '',
                     (() => {
                         const statusText = suikaStatusTextOf(wechat, phone);
                         // 仅审核通过时填卡面；异常兜底（状态通过但无卡面记录）留空
@@ -2236,7 +2264,7 @@
             if (!userData || userData.length === 0) { alert('请先上传主订单数据并点击「开始分析」后再导出来豹接龙查询表'); return; }
             const wb = XLSX.utils.book_new();
             const ws = exportLaibaoSheet();
-            ws['!cols'] = [{ wch: 22 }, { wch: 24 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 18 }, { wch: 22 }, { wch: 14 }];
+            ws['!cols'] = [{ wch: 22 }, { wch: 24 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 18 }, { wch: 60 }, { wch: 22 }, { wch: 14 }];
             XLSX.utils.book_append_sheet(wb, ws, '来豹接龙查询表');
             // 修改与放行记录 Sheet（复用修改记录+人工放行数据；无记录时放一行说明文字）
             if (suikaSubmissions && suikaSubmissions.length > 0) {
@@ -2304,19 +2332,19 @@
                 XLSX.utils.book_append_sheet(workbook, exportActivityCardSheet(), '活动小卡统计');
                 XLSX.utils.book_append_sheet(workbook, exportActivitySheet(), '活动期统计');
                 XLSX.utils.book_append_sheet(workbook, exportMilestoneSheet(), '满赠达标统计');
-                XLSX.writeFile(workbook, getTimestampFilename('抽抽乐数据分析_全部'));
+                XLSX.writeFile(workbook, getTimestampFilename('抽抽乐活动数据_全部'));
             } else if (type === 'user') {
                 XLSX.utils.book_append_sheet(workbook, exportUserSheet(), '用户统计');
-                XLSX.writeFile(workbook, getTimestampFilename('抽抽乐数据分析_用户统计'));
+                XLSX.writeFile(workbook, getTimestampFilename('抽抽乐活动数据_用户统计'));
             } else if (type === 'card') {
                 XLSX.utils.book_append_sheet(workbook, exportCardSheet(), '卡片统计');
-                XLSX.writeFile(workbook, getTimestampFilename('抽抽乐数据分析_卡片统计'));
+                XLSX.writeFile(workbook, getTimestampFilename('抽抽乐活动数据_卡片统计'));
             } else if (type === 'activity') {
                 XLSX.utils.book_append_sheet(workbook, exportActivitySheet(), '活动期统计');
-                XLSX.writeFile(workbook, getTimestampFilename('抽抽乐数据分析_活动期统计'));
+                XLSX.writeFile(workbook, getTimestampFilename('抽抽乐活动数据_活动期统计'));
             } else if (type === 'milestone') {
                 XLSX.utils.book_append_sheet(workbook, exportMilestoneSheet(), '满赠达标统计');
-                XLSX.writeFile(workbook, getTimestampFilename('抽抽乐数据分析_满赠达标'));
+                XLSX.writeFile(workbook, getTimestampFilename('抽抽乐活动数据_满赠达标'));
             } else if (type === 'laibao') {
                 XLSX.utils.book_append_sheet(workbook, exportLaibaoSheet(), '来豹接龙查询表');
                 XLSX.writeFile(workbook, getTimestampFilename('抽抽乐_来豹接龙查询表'));
@@ -2800,7 +2828,19 @@
                 suikaSubmissions.forEach(s => { statusCount[s.audit.status] = (statusCount[s.audit.status] || 0) + 1; });
                 alert(`碎卡兑换审核完成：共 ${suikaSubmissions.length} 个提交\n通过 ${statusCount['通过']} 个，未找到用户 ${statusCount['未找到用户']} 个\n需人工处理 ${statusCount['需人工处理']} 个`);
             } catch (err) {
-                alert('碎卡兑换表解析失败：' + err.message);
+                const rawMsg = (err && err.message) ? err.message : String(err || '未知错误');
+                let alertMsg;
+                if (suikaSubmissions.length === 0 || /不是碎卡兑换表|内容为空/.test(rawMsg)) {
+                    alertMsg = '碎卡兑换表解析失败：' + rawMsg;
+                } else if (/reading|Cannot read properties|undefined|null/.test(rawMsg)) {
+                    const noAuditCount = suikaSubmissions.filter(s => !s.audit).length;
+                    alertMsg = '碎卡审核中断（已解析 ' + suikaSubmissions.length + ' 个提交）：' + rawMsg
+                        + (noAuditCount > 0 ? '。其中 ' + noAuditCount + ' 个提交缺少审核状态，多为「张数列误填卡面编号」等格式错误分支' : '')
+                        + '。建议先取消勾选「同手机号合并审核」重试；若仍失败请联系开发者并提供该表。';
+                } else {
+                    alertMsg = '碎卡兑换表处理失败：' + rawMsg;
+                }
+                alert(alertMsg);
             } finally {
                 suikaAnalyzeBtn.disabled = false;
                 suikaAnalyzeBtn.textContent = '开始审核';
@@ -2817,19 +2857,88 @@
             return null;
         }
 
-        // 解析换入卡单元格：可能含多卡面（如 'SR11，SR15'、'ssr7 sr5'）
+        // 碎卡填表格式错误状态文案（改动2/3：张数语义列误填卡面编号时强制需人工审核）
+        const SUIKA_QTY_ERR_STATUS = '接龙提交内容填写错误，需人工审核，请联系微店客服';
+
+        // 按索引区间移除文本片段（用等长空格占位，避免破坏后续正则匹配位置）
+        function removeUsedRanges(text, ranges) {
+            let out = text;
+            ranges.slice().sort((a, b) => b[0] - a[0]).forEach(r => {
+                out = out.slice(0, r[0]) + ' '.repeat(r[1] - r[0]) + out.slice(r[1]);
+            });
+            return out;
+        }
+
+        // 正则提取"卡面编号+可选x数量"条目：从任意混杂文本（；、，？、. 空格等无关字符均忽略）
+        // 中提取合法卡面形态 (R|SR|SSR|r|sr|ssr)\d+，可选后缀 x/×/*数字 表示数量；数量缺失时为 null
+        // 返回 [{ card, qty|null }]，无法提取任何卡面时返回 []
+        function extractCardTokenEntries(text) {
+            const s = String(text || '').replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+            if (!s) return [];
+            const out = [];
+            const used = [];
+            const reQ = /((?:SSSR|SSR|SR|R|N)\s*\d+)\s*[x×*]\s*(\d+)/gi;
+            let m;
+            while ((m = reQ.exec(s)) !== null) {
+                const c = normalizeCardId(m[1]);
+                const q = parseInt(m[2], 10);
+                if (c && Number.isFinite(q) && q > 0) out.push({ card: c, qty: q });
+                used.push([m.index, m.index + m[0].length]);
+            }
+            // 移除已带数量的片段后，剩余文本中再提取裸卡面（空数量由调用方默认 1）
+            const bareText = removeUsedRanges(s, used);
+            const reB = /(?:SSSR|SSR|SR|R|N)\s*\d+/gi;
+            let m2;
+            while ((m2 = reB.exec(bareText)) !== null) {
+                const c = normalizeCardId(m2[0]);
+                if (c && !out.some(o => o.card === c && o.qty !== null)) out.push({ card: c, qty: null });
+            }
+            return out;
+        }
+
+        // 检测"张数语义列误填卡面编号"（改动2）：张数列只允许表达数量，
+        // 一旦出现无数量语法的裸卡面形态（如整格 'ssr7'、'SR11，SR15'），判定填表格式错误。
+        // 带数量语法的合法配对（'R10x5'、'5张r34 1张r44'、'r50三张'）不判错（保留既有显式配对支持）。
+        // 返回 { field, raw } 或 null
+        function detectQtyMisplaceInCell(text, field) {
+            const raw = String(text || '').trim();
+            if (!raw) return null;
+            if (/^\d+$/.test(raw)) return null;
+            const s = raw.replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+            // 整格为单个裸卡面编号
+            if (/^(?:SSSR|SSR|SR|R|N)\s*\d+$/i.test(s)) return { field, raw };
+            let work = s;
+            // 移除带数量语义的合法片段：卡面x数量 / 卡面N张 / N张卡面
+            work = work.replace(/(?:SSSR|SSR|SR|R|N)\s*\d+\s*[x×*]\s*\d+/gi, '');
+            work = work.replace(/(?:SSSR|SSR|SR|R|N)\s*\d+\s*(?:[一二两三四五六七八九十]|\d+)\s*张/gi, '');
+            work = work.replace(/(?:[一二两三四五六七八九十]|\d+)\s*张\s*(?:SSSR|SSR|SR|R|N)\s*\d+/gi, '');
+            // 剩余文本中若仍有卡面形态 token（如 'ssr7 sr5'、'ssr7x' 之类），视为错位
+            if (/(?:SSSR|SSR|SR|R|N)\s*\d+/i.test(work)) return { field, raw };
+            return null;
+        }
+
+        // 张数语义严格解析（改动4 类型防御）：仅接受纯数量（数字/中文数字/带张个等单位的数量词），
+        // 含卡面形态文本（如 ssr7）一律返回 0，绝不把文本数字当数量（格式错误由 detectQtyMisplaceInCell 统一拦截）
+        function strictQtyOf(v) {
+            if (v === null || v === undefined) return 0;
+            if (typeof v === 'number') return (Number.isFinite(v) && v > 0) ? Math.round(v) : 0;
+            const s = String(v).trim().replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+            if (!s) return 0;
+            if (detectQtyMisplaceInCell(s, '')) return 0;
+            const q = parseQty(s);
+            return (Number.isFinite(q) && q > 0) ? q : 0;
+        }
+
+        // 解析换入卡单元格：可能含多卡面（如 'SR11，SR15'、'ssr7 sr5'）；
+        // 先正则提取卡面条目（兼容分号/问号等无关符号），整格单卡面回退 normalizeCardId
         function parseInCardCell(cellText) {
             const cell = String(cellText || '').trim();
             if (!cell) return [];
+            const entries = extractCardTokenEntries(cell);
+            if (entries.length > 0) return entries.map(e => e.card);
             const normAll = normalizeCardId(cell);
             if (normAll) return [normAll];
-            const parts = cell.split(/[、，,；;/\s]+/).map(s => s.trim()).filter(Boolean);
-            const cards = [];
-            parts.forEach(p => {
-                const n = normalizeCardId(p);
-                if (n) cards.push(n);
-            });
-            return cards;
+            return [];
         }
 
         // 解析换出卡单元格：支持多卡面（'R23、R32、R22…'）、显式配对（'5张r34'/'r34五张'）、
@@ -2887,10 +2996,17 @@
                 if (c && v !== null) return { review: false, cards: [{ card: c, qty: v }] };
             }
             const parts = cellWork.split(/[、，,；;/\s|·&+]+/).map(s => s.trim()).filter(Boolean);
-            if (parts.length === 0) return { review: false, cards: [] };
+            // 正则提取主路径（改动1）：先直接提取「卡面编号+可选x数量」，兼容分号/问号等一切无关符号
+            const tokenEntries = extractCardTokenEntries(cellWork);
+            if (tokenEntries.length === 0 && parts.length === 0) return { review: false, cards: [] };
             const result = [];
-            const unmatched = [];
             let review = false;
+            if (tokenEntries.length > 0) {
+                // 提取成功：卡面/数量条目完整，忽略其它无关字符（如 "；R10x5、R38、R39x2" 前导分号），
+                // 直接交给下方 qty 配对/补齐逻辑；result 中 qty=null 的卡面待后续配平
+                tokenEntries.forEach(e => { result.push({ card: e.card, qty: e.qty }); });
+            } else {
+            const unmatched = [];
             // 内嵌数量：'R2*3'/'R2x3'/'R2×3'/'R2 3张'（需带'张'，避免把'R23'误拆）
             const reCardQty = /^((?:SSSR|SSR|SR|R|N)\s*\d+)\s*[x×*]\s*([一二两三四五六七八九十]|\d+)\s*张?$/i;
             const reCardQty2 = /^((?:SSSR|SSR|SR|R|N)\s*\d+)\s*[（(]?\s*([一二两三四五六七八九十]|\d+)\s*张\s*[）)]?$/i;
@@ -2923,6 +3039,7 @@
                     // 返回空列表+review，由前置检查以"换出卡填写格式复杂/未解析出有效卡面"拦截
                     return { review: true, cards: [] };
                 }
+            }
             }
             // qty 列显式配对：'R2 3张'/'3张R2' 出现在 qty 列时按卡面绑定
             const explicit = {};
@@ -3040,7 +3157,8 @@
                         orderNo: getCell(r, idx.order),
                         submitTime: getCell(r, idx.time),
                         requests: [],
-                        pendingOut: []
+                        pendingOut: [],
+                        rawLines: []
                     };
                     submissions.push(cur);
                 }
@@ -3049,34 +3167,45 @@
                 const outQtyRaw = getCell(r, idx.outQty);
                 const inCard = getCell(r, idx.inCard);
                 const inQtyRaw = getCell(r, idx.inQty);
+                // 改动2：行级检测——张数语义列误填卡面编号（如 ssr7），命中则登记到提交级并强制人工
+                const outQtyIssue = detectQtyMisplaceInCell(outQtyRaw, '换出张数列');
+                const inQtyIssue = detectQtyMisplaceInCell(inQtyRaw, '换入张数列');
+                if (outQtyIssue) {
+                    if (!cur.qtyMisplaces) cur.qtyMisplaces = [];
+                    cur.qtyMisplaces.push({ row: i + 2, field: outQtyIssue.field, raw: outQtyIssue.raw });
+                }
+                if (inQtyIssue) {
+                    if (!cur.qtyMisplaces) cur.qtyMisplaces = [];
+                    cur.qtyMisplaces.push({ row: i + 2, field: inQtyIssue.field, raw: inQtyIssue.raw });
+                }
+                // 记录原始填报行（物理行号 + 换出/换入原文），供审核原因附“原始填报参考”与客服核对
+                cur.rawLines.push({ rowNum: i + 2, outRaw: outCard, outQtyRaw, inRaw: inCard, inQtyRaw });
                 if (inCard) {
-                    const inQtyNorm = normalizeCardId(inQtyRaw);
-                    let inCards;
-                    let inQtyNum = parseQty(inQtyRaw);
-                    if (inQtyNorm) {
-                        // inQty 列实际填的是另一张换入卡（如 'SR1 | SSR8'）
-                        inCards = parseInCardCell(inCard).concat([inQtyNorm]);
-                        inQtyNum = 1;
-                    } else {
-                        inCards = parseInCardCell(inCard);
-                    }
+                    // 改动2：移除 inQtyNorm 错位卡面并入换入卡的旧逻辑；非纯数量的张数列由 strictQtyOf 拒绝（返回 0）
+                    const inCards = parseInCardCell(inCard);
+                    const inQtyNum = strictQtyOf(inQtyRaw);
                     if (inCards.length > 0) {
                         inCards.forEach((c, ci) => {
                             const req = {
                                 inCard: c,
                                 inQty: ci === 0 ? (inQtyNum > 0 ? inQtyNum : 1) : 1,
                                 outCards: [],
-                                multiIn: inCards.length > 1
+                                multiIn: inCards.length > 1,
+                                rowNum: i + 2,
+                                inRaw: inCard,
+                                inQtyRawText: inQtyRaw
                             };
                             cur.requests.push(req);
                         });
                     } else {
-                        const req = { inCard, inQty: inQtyNum > 0 ? inQtyNum : 1, outCards: [], badIn: true };
+                        const req = { inCard, inQty: inQtyNum > 0 ? inQtyNum : 1, outCards: [], badIn: true, rowNum: i + 2, inRaw: inCard, inQtyRawText: inQtyRaw };
                         cur.requests.push(req);
                     }
                 }
                 if (outCard || outQtyRaw) {
-                    const parsed = parseOutCardCell(outCard, outQtyRaw);
+                    // 改动2：该行换出张数列疑似误填卡面时，不把错位文本当数量源传给解析（由格式错误人工兜底）
+                    const qtyForParse = outQtyIssue ? '' : outQtyRaw;
+                    const parsed = parseOutCardCell(outCard, qtyForParse);
                     // 换出卡归属最近一个请求（修复旧逻辑：_outTarget 指向组内第一个请求，
                     // 会把"换入为空行"的补充换出卡全部堆积到第一个请求，造成明细显示旧值/错位）
                     const target = cur.requests.length > 0 ? cur.requests[cur.requests.length - 1] : null;
@@ -3190,7 +3319,36 @@
             });
         }
 
+        // 改动2：张数语义列误填卡面编号（格式错误）提交的强制人工落盘
+        // 原因写明具体可疑点（哪个张数列填了什么，自然语言表述不含物理行号），全部请求统一标记
+        // 改动v9：去掉物理行号与“第X行”表述；换入/换出侧由 m.field 措辞（field = 换入张数列 / 换出张数列）
+        function auditQtyMisplaced(sub) {
+            const mis = sub.qtyMisplaces || [];
+            const reasons = mis.map(m => '提交的接龙的' + (m.field || '张数列') + '填了「' + String(m.raw).slice(0, 20) + '」，疑似卡面编号误填张数列');
+            // 修复 reading 'status'：此前仅给 requests 赋值、漏给 sub 本身赋值；
+            // auditSubmissionsGrouped 的 misSubs 分支（同手机号合并审核）下 sub.audit 为 undefined，
+            // 渲染/统计阶段访问 s.audit.status 会抛 Cannot read properties of undefined (reading 'status')
+            sub.audit = { pass: false, type: SUIKA_QTY_ERR_STATUS, status: SUIKA_QTY_ERR_STATUS, reasons };
+            sub.requests.forEach(req => {
+                req.audit = {
+                    pass: false,
+                    type: SUIKA_QTY_ERR_STATUS,
+                    usedDraws: 0,
+                    inCard: normalizeCardId(req.inCard) || req.inCard || '',
+                    inQty: req.inQty > 0 ? req.inQty : 1,
+                    reasons
+                };
+            });
+            return { pass: false, status: SUIKA_QTY_ERR_STATUS, reasons };
+        }
+
         function auditSubmission(sub, remainingDraws) {
+            // 改动2：格式错误（张数列误填卡面）强制需人工审核，优先于未找到用户等其它判定
+            if (sub.qtyMisplaces && sub.qtyMisplaces.length > 0) {
+                const ret = auditQtyMisplaced(sub);
+                sub.audit = ret;
+                return ret;
+            }
             const user = sub.user;
             const userCards = getUserCards(user);
             const triedKeys = (sub.userMatch && sub.userMatch.triedKeys) ? sub.userMatch.triedKeys : [];
@@ -3225,6 +3383,34 @@
         function auditSubmissionsGrouped(subList, user, triedKeys) {
             const allRequests = [];
             subList.forEach(s => { s.requests.forEach(r => { r._subCode = s.code; allRequests.push(r); }); });
+            // 改动2：组内存在格式错误（张数列误填卡面）提交时，该提交强制需人工审核，
+            // 组内其余正常提交照常审核，但受错误提交影响（共享抽数）需整体阻塞时保持需人工
+            const misSubs = subList.filter(s => s.qtyMisplaces && s.qtyMisplaces.length > 0);
+            if (misSubs.length > 0) {
+                const misRet = [];
+                misSubs.forEach(s => misRet.push(auditQtyMisplaced(s)));
+                const normalSubs = subList.filter(s => !(s.qtyMisplaces && s.qtyMisplaces.length > 0));
+                if (normalSubs.length > 0) {
+                    const virtualSub = { requests: [], user: user || (subList[0] && subList[0].user), userMatch: subList[0] && subList[0].userMatch };
+                    normalSubs.forEach(s => { s.requests.forEach(r => virtualSub.requests.push(r)); });
+                    const nResult = auditSubmissionAggregated(virtualSub, user || (subList[0] && subList[0].user), getUserCards(user || (subList[0] && subList[0].user)), (user || (subList[0] && subList[0].user)).totalDraws);
+                    const nStatus = nResult.pass ? '通过' : '需人工处理';
+                    normalSubs.forEach(s => {
+                        s.audit = { pass: nResult.pass, status: nStatus };
+                        s.requests.forEach(req => {
+                            req.audit = {
+                                pass: nResult.pass,
+                                type: nStatus,
+                                usedDraws: nResult.usedDraws,
+                                inCard: normalizeCardId(req.inCard) || req.inCard || '',
+                                inQty: req.inQty > 0 ? req.inQty : 1,
+                                reasons: nResult.reasons
+                            };
+                        });
+                    });
+                }
+                return { pass: false, status: SUIKA_QTY_ERR_STATUS };
+            }
             // 前置检查：逐请求定位原因
             const checkItems = precheckAllRequests(allRequests, user, triedKeys);
             const blockedItems = checkItems.filter(x => x.pre);
@@ -3285,7 +3471,10 @@
                 if (hasRaw) {
                     return { type: '需人工处理', reasons: [`换出卡填写内容未解析出有效卡面（原始内容：${String(hasRaw).slice(0, 40)}），需人工处理`] };
                 }
-                return { type: '需人工处理', reasons: ['换出卡空白（换出卡数为0，未填写换出卡明细），需人工核实'] };
+                // 修复咕咕类误判：同一提交内「换出列留空」的后续换入行不再逐请求拦截为“换出卡空白”，
+                // 换出明细可能位于上一行（纵向合并/仅首行填写），交由提交级聚合统一核算；
+                // 若整提交确实漏填，聚合层会报“换出卡张数异常（实际0张，疑似漏填N张）”，提示更精确。
+                return null;
             }
             return null;
         }
@@ -3372,7 +3561,7 @@
         // 审核原因分类：格式问题（填写/解析层面，可批量放行） vs 内容问题（实质性不符，需人工核实）
         function suikaReasonClassify(reason) {
             const s = String(reason || '');
-            if (/格式|未用标点|未解析|无法识别|未识别|括号|原始内容|空白|换出卡数为0|漏填|多填|张数异常|格式复杂|格式需留意|测试数据|换入卡面无法识别/.test(s)) return '格式';
+            if (/格式|未用标点|未解析|无法识别|未识别|括号|原始内容|空白|换出卡数为0|漏填|多填|张数异常|格式复杂|格式需留意|测试数据|换入卡面无法识别|接龙提交内容填写错误|疑似卡面编号误填张数列/.test(s)) return '格式';
             if (/抽数不足|总抽数不足|未在该用户订单中抽到|数量不足|无法平换/.test(s)) return '内容';
             return '';
         }
@@ -3383,6 +3572,7 @@
             return `<span style="display:inline-block;background:${cls === '格式' ? '#dbeafe' : '#fee2e2'};color:${color};padding:0 6px;border-radius:8px;font-size:11px;margin-right:4px;white-space:nowrap;">${cls}问题</span>${reason}`;
         }
 
+        // 改动v9：查询用户可见处不再输出【原始填报参考】（含物理行号）；该信息仅保留在客服修改弹窗只读区块（suikaOpenEditReqModal）
         // ---------- 提交级原因综合表述（优化B：不再堆叠 [请求N]，改为组级综合） ----------
         // 第一行汇总兑换张数与换入卡面，随后逐条合并同类规则问题；请求明细表仍保留逐条详情
         function buildSuikaSummaryReason(s, opts) {
@@ -3404,12 +3594,22 @@
             }
             const allReasons = s.requests.flatMap(r => (r.audit ? (r.audit.reasons || []) : []));
             if (allReasons.length === 0) {
-                if (s.audit.status === '通过' || s.audit.pass) lines.push('✓ 全部通过');
+                if (s.audit.status === '通过' || s.audit.pass) {
+                    lines.push('✓ 全部通过');
+                    return lines.join(withHtml ? '<br>' : '\n');
+                }
                 else if (s.audit.blockedFrom) lines.push('同手机号其他提交需人工处理（' + s.audit.blockedFrom + '）');
                 else lines.push(s.audit.status || '需人工处理');
                 return lines.join(withHtml ? '<br>' : '\n');
             }
             const tag = withHtml ? suikaReasonTagged : x => x;
+            // 0) 填表格式错误（张数列误填卡面）：整条展示不拆解，直接给出可疑点定位
+            // Set 去重：auditQtyMisplaced 将同一 reasons 数组共享给各请求，flatMap 后会重复，需先保序去重
+            const qtyErrReasons = [...new Set(allReasons.filter(x => /疑似卡面编号误填张数列/.test(x)))];
+            if (qtyErrReasons.length > 0) {
+                qtyErrReasons.forEach(x => lines.push(tag(x)));
+                return lines.join(withHtml ? '<br>' : '\n');
+            }
             // 1) 换出卡张数不足（合并同类，取代表性描述）
             const qtyReasons = allReasons.filter(x => /换出卡张数异常/.test(x));
             if (qtyReasons.length > 0) {
@@ -3460,6 +3660,11 @@
             return parts.every(p => hay.includes(p));
         }
         function renderSuikaResults() {
+            // 防御：个别提交/请求缺失 audit（历史漏赋分支）时补齐，避免渲染中途访问 s.audit.status 崩溃
+            suikaSubmissions.forEach(s => {
+                if (!s.audit) s.audit = { pass: false, status: '需人工处理', type: '需人工处理', reasons: ['审核状态未生成，需人工核实'] };
+                (s.requests || []).forEach(r => { if (!r.audit) r.audit = { pass: false, type: '需人工处理', reasons: ['审核状态未生成，需人工核实'] }; });
+            });
             const kw = document.getElementById('suikaSearchInput') ? document.getElementById('suikaSearchInput').value.trim().toLowerCase() : '';
             const allSubs = suikaSubmissions;
             const submissions = kw ? allSubs.filter(s => suikaMatchSubmission(s, kw)) : allSubs;
@@ -3481,7 +3686,8 @@
             const statusMeta = {
                 '通过': { bg: '#f0fdf4', color: '#059669', badge: '✓ 通过' },
                 '未找到用户': { bg: '#fff7ed', color: '#ea580c', badge: '⚠ 未找到用户' },
-                '需人工处理': { bg: '#fefce8', color: '#ca8a04', badge: '◍ 需人工处理' }
+                '需人工处理': { bg: '#fefce8', color: '#ca8a04', badge: '◍ 需人工处理' },
+                [SUIKA_QTY_ERR_STATUS]: { bg: '#fff1f2', color: '#e11d48', badge: '✗ 接龙填写错误' }
             };
             const metaOf = st => statusMeta[st] || statusMeta['需人工处理'];
             const badgeHtml = (st, meta) => `<span style="color:${meta.color};font-weight:bold;">${meta.badge}</span>`;
@@ -3522,17 +3728,6 @@
                 // 提交级综合表述（优化B）：不再堆叠 [请求N]，改为组级综合；请求明细折叠仍保留逐条
                 let reasonStr = buildSuikaSummaryReason(s);
                 if (!reasonStr) reasonStr = status;
-                // 请求级明细（折叠展开，供查看逐条请求的换入/换出/原因）
-                const reqDetailHtml = s.requests.map((r, ri) => {
-                    const st = r.audit.type || s.audit.status || '需人工处理';
-                    const m2 = metaOf(st);
-                    const rReason = reasonStrOf(s, ri);
-                    return `<div style="padding:4px 0;border-bottom:1px dashed #e5e7eb;">
-                        <span style="font-weight:bold;">请求${ri + 1}：</span>${inStrOf(r) || '-'} → ${outStrOf(r) || '-'}
-                        <span style="margin-left:6px;">${badgeHtml(st, m2)}</span>
-                        ${rReason ? `<div style="font-size:11px;color:#888;margin-top:2px;">${rReason}</div>` : ''}
-                    </div>`;
-                }).join('');
                 return `<tr style="background:${meta.bg};">
                     <td>${s.code}</td>
                     <td>${s.nickname || '-'}</td>
@@ -3544,7 +3739,6 @@
                     <td style="max-width:320px;font-size:12px;color:${meta.color};">${reasonStr}</td>
                     <td style="white-space:nowrap;">
                         <button type="button" class="suikaEditSubBtn suika-op-btn" data-code="${escHtml(s.code)}" style="border:1px solid #6b7280;background:#f9fafb;color:#374151;" title="修改该提交的昵称/姓名/手机号/订单号后重新匹配审核">修改</button>
-                        <details style="font-size:12px;display:inline-block;vertical-align:middle;margin-left:8px;"><summary style="cursor:pointer;color:#20517d;">查看请求明细</summary><div style="margin-top:6px;max-height:260px;overflow:auto;">${reqDetailHtml || '<span style="color:#999;">无请求</span>'}</div></details>
                     </td>
                 </tr>`;
             }).join('');
@@ -4070,7 +4264,15 @@
                     <input type="number" class="suikaOutQty" value="${o.qty || 1}" min="1" style="width:80px;padding:6px 10px;border:1px solid #ccc;border-radius:8px;font-size:13px;box-sizing:border-box;">
                     <button type="button" onclick="suikaRemoveOutRow(this)" style="padding:4px 10px;border:1px solid #dc2626;border-radius:8px;background:#fef2f2;color:#dc2626;font-size:12px;cursor:pointer;">删除</button>
                 </div>`).join('');
+            const rawRowsInfo = (sub.rawLines && sub.rawLines.length > 0) ? sub.rawLines.map(x =>
+                `<div style="font-size:11px;color:#9ca3af;">行${x.rowNum}｜换出列「${escHtml(String(x.outRaw || '（空）').slice(0, 60))}」｜换出张数列「${escHtml(String(x.outQtyRaw || '（空）').slice(0, 20))}」｜换入列「${escHtml(String(x.inRaw || '（空）').slice(0, 60))}」｜换入张数列「${escHtml(String(x.inQtyRaw || '（空）').slice(0, 20))}」</div>`
+            ).join('') : '<div style="font-size:11px;color:#999;">无原始填报记录</div>';
             const bodyHtml = `
+                <div style="font-size:12px;font-weight:bold;color:#20517d;margin-bottom:6px;">原始填报参考（只读）</div>
+                <div style="background:#f9fafb;border:1px solid #eee;border-radius:8px;padding:8px 10px;margin-bottom:12px;max-height:150px;overflow:auto;font-size:11px;color:#666;">
+                    <div>提交 ${escHtml(sub.code || '')}｜昵称：${escHtml(sub.nickname || '-')}｜手机：${escHtml(sub.phone || '-')}｜订单号：${escHtml(sub.orderNo || '-')}</div>
+                    ${rawRowsInfo}
+                </div>
                 <div style="font-size:12px;font-weight:bold;color:#20517d;margin-bottom:6px;">提交信息</div>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
                     <div><div style="font-size:12px;color:#666;margin-bottom:4px;">昵称</div><input type="text" id="suikaEditNick" value="${escAttr(sub.nickname || '')}" style="width:100%;padding:6px 10px;border:1px solid #ccc;border-radius:8px;font-size:13px;box-sizing:border-box;"></div>
@@ -4455,7 +4657,7 @@
             const ws4 = userData && userData.length > 0
                 ? exportLaibaoSheet()
                 : XLSX.utils.aoa_to_sheet([['未上传主数据，无法生成来豹接龙查询表']]);
-            ws4['!cols'] = [{ wch: 22 }, { wch: 24 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 22 }, { wch: 14 }];
+            ws4['!cols'] = [{ wch: 22 }, { wch: 24 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 60 }, { wch: 22 }, { wch: 14 }];
             XLSX.utils.book_append_sheet(wb, ws4, '来豹接龙查询表');
             XLSX.writeFile(wb, getTimestampFilename('集赞导入结果'));
         }
