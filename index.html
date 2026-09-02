@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>抽抽乐订单数据分析</title>
+    <title>抽抽乐订单数据分析 最后更新时间2026.9.2 13:00</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <style>
@@ -150,7 +150,7 @@
     <div class="container">
         <div class="header">
             <h1>📊 抽抽乐订单数据分析</h1>
-            <div style="font-size:12px;color:#999;margin:-8px 0 14px;">最后更新：2026-09-01</div>
+            <div style="font-size:12px;color:#999;margin:-8px 0 14px;">最后更新：2026-09-02 13:00</div>
             <p>上传Excel文件，自动生成数据分析报告</p>
         </div>
 
@@ -2111,7 +2111,39 @@
                 const key = suikaStatusMap['a:' + acct] || suikaStatusMap['p:' + normalizePhone(phone)] || '';
                 return key === '通过' ? '审核通过' : (key === '需人工' ? '需人工审核，请联系微店客服' : '未参与');
             };
-            const headers = ['查询码(下单账号)', '下单账号', '收货人手机号', '总抽数', '是否端盒', '超like卡', '全员特典', '宣传集赞礼', '补邮情况', '限时小卡获得', '浪漫疯子获得', '周末活动获得', '终极活动获得', '获得卡片', '个人满抽礼', '碎卡兑换审核状态', '备注'];
+            // 审核通过卡面映射（与 suikaStatusMap 同 key 体系：按手机号/账号关联，仅聚合审核通过的请求的换入卡面）
+            const suikaPassCardsMap = {};
+            const addPassCard = (k, card, qty) => {
+                if (!card) return;
+                if (!suikaPassCardsMap[k]) suikaPassCardsMap[k] = {};
+                suikaPassCardsMap[k][card] = (suikaPassCardsMap[k][card] || 0) + qty;
+            };
+            (suikaSubmissions || []).forEach(s => {
+                const sAudit = s.audit || {};
+                const sPass = sAudit.pass === true || sAudit.status === '通过' || sAudit.type === '通过';
+                (s.requests || []).forEach(r => {
+                    const ra = r.audit || {};
+                    let rPass = ra.type === '通过' || ra.pass === true || ra.status === '通过';
+                    // 请求级 audit 完全缺失时跟随提交级判定（与状态列口径一致）
+                    if (!rPass && ra.type === undefined && ra.pass === undefined && ra.status === undefined && sPass) rPass = true;
+                    if (!rPass) return;
+                    const card = String(ra.inCard || r.inCard || '').trim();
+                    if (!card) return;
+                    const qty = parseInt(ra.inQty || r.inQty || '1', 10);
+                    const finalQty = (isNaN(qty) || qty < 1) ? 1 : qty;
+                    const sp = normalizePhone(String(s.phone || '').trim());
+                    if (sp) addPassCard('p:' + sp, card, finalQty);
+                    const acct = String((s.user && s.user.wechat) || s.nickname || '').trim();
+                    if (acct) addPassCard('a:' + acct, card, finalQty);
+                });
+            });
+            // 取该用户通过卡面汇总文本；与状态列同优先级（先账号 key 再手机号 key）
+            const suikaPassCardsTextOf = (acct, phone) => {
+                const m = suikaPassCardsMap['a:' + acct] || suikaPassCardsMap['p:' + normalizePhone(phone)];
+                if (!m) return '';
+                return Object.keys(m).map(card => card + '×' + m[card]).join('、');
+            };
+            const headers = ['查询码(下单账号)', '下单账号', '收货人手机号', '总抽数', '是否端盒', '超like卡', '全员特典', '宣传集赞礼', '补邮情况', '限时小卡获得', '浪漫疯子获得', '周末活动获得', '终极活动获得', '获得卡片', '个人满抽礼', '碎卡兑换审核状态', '审核通过卡面', '备注'];
             const data = userData.map(u => {
                 // 补邮情况描述：无需补邮 / 已补邮 / 未补邮
                 // 规则：满10抽无需补邮，少于10抽才需要补邮
@@ -2188,6 +2220,11 @@
                     u.items || '',
                     u.milestoneRewards || '',
                     suikaStatusTextOf(wechat, phone),
+                    (() => {
+                        const statusText = suikaStatusTextOf(wechat, phone);
+                        // 仅审核通过时填卡面；异常兜底（状态通过但无卡面记录）留空
+                        return statusText === '审核通过' ? suikaPassCardsTextOf(wechat, phone) : '';
+                    })(),
                     remark
                 ];
             });
@@ -2199,7 +2236,7 @@
             if (!userData || userData.length === 0) { alert('请先上传主订单数据并点击「开始分析」后再导出来豹接龙查询表'); return; }
             const wb = XLSX.utils.book_new();
             const ws = exportLaibaoSheet();
-            ws['!cols'] = [{ wch: 22 }, { wch: 24 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 18 }, { wch: 14 }];
+            ws['!cols'] = [{ wch: 22 }, { wch: 24 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 18 }, { wch: 22 }, { wch: 14 }];
             XLSX.utils.book_append_sheet(wb, ws, '来豹接龙查询表');
             // 修改与放行记录 Sheet（复用修改记录+人工放行数据；无记录时放一行说明文字）
             if (suikaSubmissions && suikaSubmissions.length > 0) {
@@ -4418,7 +4455,7 @@
             const ws4 = userData && userData.length > 0
                 ? exportLaibaoSheet()
                 : XLSX.utils.aoa_to_sheet([['未上传主数据，无法生成来豹接龙查询表']]);
-            ws4['!cols'] = [{ wch: 22 }, { wch: 24 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 14 }];
+            ws4['!cols'] = [{ wch: 22 }, { wch: 24 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 22 }, { wch: 14 }];
             XLSX.utils.book_append_sheet(wb, ws4, '来豹接龙查询表');
             XLSX.writeFile(wb, getTimestampFilename('集赞导入结果'));
         }
