@@ -5186,11 +5186,27 @@
         var CLOUD_API_BASE = 'https://zhoukeyu-gacha-order-data-analysis.pages.dev';
         var CLOUD_TOKEN_KEY = 'gacha_order_cloud_token';
         var CLOUD_USER_KEY = 'gacha_order_cloud_user';
+        var CLOUD_REMEMBER_KEY = 'gacha_order_cloud_remember';
 
-        function cloudGetToken() { try { return localStorage.getItem(CLOUD_TOKEN_KEY) || ''; } catch (e) { return ''; } }
-        function cloudGetUser() { try { return localStorage.getItem(CLOUD_USER_KEY) || ''; } catch (e) { return ''; } }
-        function cloudSetAuth(token, user) { try { localStorage.setItem(CLOUD_TOKEN_KEY, token || ''); localStorage.setItem(CLOUD_USER_KEY, user || ''); } catch (e) {} }
-        function cloudClearAuth() { try { localStorage.removeItem(CLOUD_TOKEN_KEY); localStorage.removeItem(CLOUD_USER_KEY); } catch (e) {} }
+        // 记住我：勾选 -> token 存 localStorage（下次打开自动进入）；未勾选 -> 存 sessionStorage（关闭浏览器即失效，需重新登录）
+        function cloudRememberEnabled() { try { return localStorage.getItem(CLOUD_REMEMBER_KEY) === '1'; } catch (e) { return false; } }
+        function cloudGetToken() { try { return (cloudRememberEnabled() ? localStorage : sessionStorage).getItem(CLOUD_TOKEN_KEY) || ''; } catch (e) { return ''; } }
+        function cloudGetUser() { try { return (cloudRememberEnabled() ? localStorage : sessionStorage).getItem(CLOUD_USER_KEY) || ''; } catch (e) { return ''; } }
+        function cloudSetAuth(token, user, remember) {
+            try {
+                if (remember) { localStorage.setItem(CLOUD_REMEMBER_KEY, '1'); } else { localStorage.removeItem(CLOUD_REMEMBER_KEY); }
+                const store = remember ? localStorage : sessionStorage;
+                store.setItem(CLOUD_TOKEN_KEY, token || '');
+                store.setItem(CLOUD_USER_KEY, user || '');
+                const other = remember ? sessionStorage : localStorage;
+                other.removeItem(CLOUD_TOKEN_KEY);
+                other.removeItem(CLOUD_USER_KEY);
+            } catch (e) {}
+        }
+        function cloudClearAuth() {
+            try { localStorage.removeItem(CLOUD_TOKEN_KEY); localStorage.removeItem(CLOUD_USER_KEY); localStorage.removeItem(CLOUD_REMEMBER_KEY); } catch (e) {}
+            try { sessionStorage.removeItem(CLOUD_TOKEN_KEY); sessionStorage.removeItem(CLOUD_USER_KEY); } catch (e) {}
+        }
 
         function cloudNowText() {
             const d = new Date();
@@ -5441,26 +5457,33 @@
                 '<div id="cloudLoginTip" style="display:none;background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;font-size:12px;padding:8px 10px;border-radius:8px;margin-bottom:14px;"></div>' +
                 '<div style="font-size:13px;color:#555;margin-bottom:6px;">账号</div>' +
                 '<select id="cloudLoginUser" style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;margin-bottom:14px;box-sizing:border-box;background:#fff;">' +
-                '<option value="ad001">ad001</option><option value="ad002">ad002</option><option value="ad003">ad003</option><option value="ad004">ad004</option>' +
+                '<option value="">— 请选择账号 —</option><option value="ad001">ad001</option><option value="ad002">ad002</option><option value="ad003">ad003</option><option value="ad004">ad004</option>' +
                 '</select>' +
                 '<div style="font-size:13px;color:#555;margin-bottom:6px;">密码</div>' +
-                '<input type="password" id="cloudLoginPass" placeholder="请输入管理员密码" style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;margin-bottom:20px;box-sizing:border-box;">' +
+                '<input type="password" id="cloudLoginPass" placeholder="请输入管理员密码" style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;margin-bottom:14px;box-sizing:border-box;">' +
+                '<div style="display:flex;align-items:center;margin-bottom:18px;font-size:13px;color:#555;user-select:none;">' +
+                '<input type="checkbox" id="cloudLoginRemember" style="width:15px;height:15px;margin:0 7px 0 0;accent-color:#20517d;cursor:pointer;">' +
+                '<label for="cloudLoginRemember" style="cursor:pointer;">记住我（下次打开自动登录）</label>' +
+                '</div>' +
                 '<button id="cloudLoginBtn" style="width:100%;padding:11px 0;border:none;border-radius:10px;background:linear-gradient(135deg,#20517d,#3b82f6);color:#fff;font-size:15px;font-weight:bold;cursor:pointer;">登 录</button>' +
-                '<div style="font-size:11px;color:#aaa;margin-top:12px;text-align:center;">登录后 token 仅保存在本机浏览器 localStorage</div>' +
+                '<div style="font-size:11px;color:#aaa;margin-top:12px;text-align:center;">未勾选「记住我」时，关闭浏览器后需重新登录</div>' +
                 '</div>';
             document.body.appendChild(ov);
             cloudLoginOverlay = ov;
             const btn = document.getElementById('cloudLoginBtn');
             const pass = document.getElementById('cloudLoginPass');
+            const rememberBox = document.getElementById('cloudLoginRemember');
+            if (rememberBox) rememberBox.checked = cloudRememberEnabled();
             async function doLogin() {
                 const u = document.getElementById('cloudLoginUser').value;
                 const p = document.getElementById('cloudLoginPass').value;
+                if (!u) { tipShow('请选择账号'); return; }
                 if (!p) { tipShow('请输入密码'); return; }
                 btn.disabled = true;
                 btn.textContent = '登录中…';
                 try {
                     const json = await cloudLogin(u, p);
-                    cloudSetAuth(json.token, json.username || u);
+                    cloudSetAuth(json.token, json.username || u, !!(rememberBox && rememberBox.checked));
                     cloudHideLogin();
                     cloudRefreshUserBadge();
                     cloudStatusPill('登录成功，检查云端数据…');
