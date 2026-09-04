@@ -636,6 +636,7 @@
                 document.getElementById('analysisProgressArea').classList.add('hidden');
                 resultSection.classList.remove('hidden');
                 setTimeout(() => { Object.values(charts).forEach(c => c.resize()); }, 100);
+                queueCloudSave();
             } catch (error) {
                 alert('解析文件失败：' + error.message);
                 loadingSection.classList.add('hidden');
@@ -2913,6 +2914,7 @@
                 const statusCount = { '通过': 0, '未找到用户': 0, '需人工处理': 0 };
                 suikaSubmissions.forEach(s => { statusCount[s.audit.status] = (statusCount[s.audit.status] || 0) + 1; });
                 alert(`碎卡兑换审核完成：共 ${suikaSubmissions.length} 个提交\n通过 ${statusCount['通过']} 个，未找到用户 ${statusCount['未找到用户']} 个\n需人工处理 ${statusCount['需人工处理']} 个`);
+                queueCloudSave();
             } catch (err) {
                 const rawMsg = (err && err.message) ? err.message : String(err || '未知错误');
                 let alertMsg;
@@ -3892,6 +3894,7 @@
                 sub.audit = { pass: false, status: '需人工处理' };
             }
             renderSuikaResults();
+            queueCloudSave();
             return { ok: true };
         }
 
@@ -4298,6 +4301,7 @@
                 }
             });
             renderSuikaResults();
+            queueCloudSave();
         }
 
         // ---------- 客服手动修改（弹窗编辑 + 重新审核） ----------
@@ -4647,6 +4651,7 @@
                 }
                 const parsed = parseJizanWorkbook(wb);
                 applyJizan(parsed);
+                queueCloudSave();
             } catch (err) {
                 alert('集赞兑换表解析失败：' + err.message);
             } finally {
@@ -4975,6 +4980,7 @@
             renderJizanSummary(buildJizanSummaryFromExport(), true);
             renderTable(1);
             alert('已保存修改（第 ' + (idx + 1) + ' 条 → ' + jizanStatusTextOf(e) + (e.wechat ? '，归属 ' + e.wechat : '') + '）。集赞汇总、主表「宣传集赞礼」列与导出数据已同步刷新。');
+            queueCloudSave();
         }
 
         // 共享数据：生成"集赞修改记录"Sheet 的行数据（集赞导入结果 / 来豹接龙查询表导出共用）
@@ -5169,6 +5175,439 @@
             const el = document.getElementById('orderModalWrap');
             if (el) el.remove();
         }
+
+        // ============================================================
+        // 云端门禁与数据同步（2026-09-04 新增）
+        // 登录：POST /api/login {username,password} -> {token,username}
+        // 数据：GET /api/data 带 Authorization: Bearer token -> {data: <快照|null>}
+        //       PUT /api/data 带 Authorization: Bearer token，body {data: <快照>}
+        // 快照覆盖 main(主订单原始行)/suika(碎卡审核全量含rawCache)/jizan(集赞导入全量)
+        // ============================================================
+        var CLOUD_API_BASE = 'https://zhoukeyu-gacha-order-data-analysis.pages.dev';
+        var CLOUD_TOKEN_KEY = 'gacha_order_cloud_token';
+        var CLOUD_USER_KEY = 'gacha_order_cloud_user';
+
+        function cloudGetToken() { try { return localStorage.getItem(CLOUD_TOKEN_KEY) || ''; } catch (e) { return ''; } }
+        function cloudGetUser() { try { return localStorage.getItem(CLOUD_USER_KEY) || ''; } catch (e) { return ''; } }
+        function cloudSetAuth(token, user) { try { localStorage.setItem(CLOUD_TOKEN_KEY, token || ''); localStorage.setItem(CLOUD_USER_KEY, user || ''); } catch (e) {} }
+        function cloudClearAuth() { try { localStorage.removeItem(CLOUD_TOKEN_KEY); localStorage.removeItem(CLOUD_USER_KEY); } catch (e) {} }
+
+        function cloudNowText() {
+            const d = new Date();
+            const p = n => (n < 10 ? '0' + n : '' + n);
+            return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+        }
+
+        async function cloudRequest(path, method, bodyObj) {
+            const token = cloudGetToken();
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+            const opts = { method: method, headers: headers };
+            if (bodyObj !== undefined) opts.body = JSON.stringify(bodyObj);
+            const resp = await fetch(CLOUD_API_BASE + path, opts);
+            let text = '';
+            try { text = await resp.text(); } catch (e) {}
+            if (!resp.ok) {
+                if (resp.status === 401) cloudOnUnauthorized();
+                const err = new Error('HTTP ' + resp.status + (text ? ' ' + String(text).slice(0, 200) : ''));
+                err.status = resp.status;
+                throw err;
+            }
+            if (!text) return {};
+            try { return JSON.parse(text); } catch (e) { return { _raw: text }; }
+        }
+        async function cloudLogin(username, password) {
+            const json = await cloudRequest('/api/login', 'POST', { username: username, password: password });
+            if (!json || !json.token) throw new Error('登录接口未返回 token');
+            return json;
+        }
+        async function cloudGetData() {
+            const json = await cloudRequest('/api/data', 'GET');
+            const d = json && json.hasOwnProperty('data') ? json.data : json;
+            return (d && typeof d === 'object' && !Array.isArray(d)) ? d : null;
+        }
+        async function cloudPutData(snapshot) {
+            return await cloudRequest('/api/data', 'PUT', { data: snapshot });
+        }
+
+        var cloudSavingTimer = null;
+        var cloudSavingBusy = false;
+        var cloudToastTimer = null;
+
+        function cloudToast(msg, isErr) {
+            const old = document.getElementById('cloudToast');
+            if (old) old.remove();
+            const el = document.createElement('div');
+            el.id = 'cloudToast';
+            el.style.cssText = 'position:fixed;left:50%;bottom:60px;transform:translateX(-50%);z-index:12000;background:' + (isErr ? '#b91c1c' : '#065f46') + ';color:#fff;padding:10px 22px;border-radius:10px;font-size:14px;box-shadow:0 6px 24px rgba(0,0,0,0.25);max-width:80%;';
+            el.textContent = msg;
+            document.body.appendChild(el);
+            if (cloudToastTimer) clearTimeout(cloudToastTimer);
+            cloudToastTimer = setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 3200);
+        }
+
+        // ---------- 快照收集（内存 -> 可 JSON 载荷；剥离 user/userMatch.user 大引用） ----------
+        function cloudSanitizeSubmissions(list) {
+            if (!Array.isArray(list)) return [];
+            return list.map(function (s) {
+                const c = {};
+                Object.keys(s || {}).forEach(function (k) {
+                    if (k === 'user') return;
+                    if (k === 'userMatch') {
+                        const um = {};
+                        Object.keys(s[k] || {}).forEach(function (kk) { if (kk !== 'user') um[kk] = s[k][kk]; });
+                        c[k] = um;
+                        return;
+                    }
+                    c[k] = s[k];
+                });
+                return c;
+            });
+        }
+
+        function cloudCollectSnapshot() {
+            const has = function (v) { return typeof v !== 'undefined' && v !== null && v !== false; };
+            return {
+                schema: 'gacha-order-analysis/v1',
+                updatedAt: cloudNowText(),
+                updatedBy: cloudGetUser() || 'unknown',
+                main: { rawOrders: (typeof rawOrdersData !== 'undefined' && Array.isArray(rawOrdersData)) ? rawOrdersData : [] },
+                suika: {
+                    submissions: cloudSanitizeSubmissions(typeof suikaSubmissions !== 'undefined' ? suikaSubmissions : null),
+                    rawCache: has(suikaRawDataCache) ? suikaRawDataCache : null
+                },
+                jizan: { exportData: (typeof jizanExportData !== 'undefined' && Array.isArray(jizanExportData)) ? jizanExportData : [] }
+            };
+        }
+
+        function cloudHasAnyData() {
+            try {
+                if (typeof rawOrdersData !== 'undefined' && rawOrdersData && rawOrdersData.length) return true;
+                if (typeof suikaSubmissions !== 'undefined' && suikaSubmissions && suikaSubmissions.length) return true;
+                if (typeof jizanExportData !== 'undefined' && jizanExportData && jizanExportData.length) return true;
+            } catch (e) {}
+            return false;
+        }
+
+        function queueCloudSave() {
+            if (!cloudGetToken()) return;
+            if (cloudSavingTimer) clearTimeout(cloudSavingTimer);
+            cloudSavingTimer = setTimeout(function () { cloudSavingTimer = null; cloudSaveNow(); }, 600);
+        }
+
+        async function cloudSaveNow() {
+            if (cloudSavingBusy) return;
+            if (!cloudGetToken()) { cloudShowLogin('登录已失效，请重新登录'); return; }
+            if (!cloudHasAnyData()) { cloudStatusPill('暂无数据可保存'); return; }
+            cloudSavingBusy = true;
+            cloudStatusPill('保存中…');
+            try {
+                const snap = cloudCollectSnapshot();
+                await cloudPutData(snap);
+                cloudStatusPill('已同步 ' + snap.updatedAt);
+            } catch (e) {
+                if (e && e.status === 401) {
+                    cloudStatusPill('登录过期，请重新登录', '#ffd6d6');
+                    cloudShowLogin('登录已过期，请重新登录后继续同步');
+                } else {
+                    cloudStatusPill('保存失败（网络/服务异常）', '#ffd6d6');
+                    cloudToast('云端保存失败：' + (e && e.message ? e.message : '网络异常') + '。本地数据仍在，可稍后点「保存到云端」重试。', true);
+                }
+            } finally {
+                cloudSavingBusy = false;
+            }
+        }
+
+        // ---------- 载入云端快照 -> 内存/渲染 ----------
+        async function cloudApplySnapshot(snap) {
+            if (!snap || typeof snap !== 'object') return { ok: true, empty: true };
+            const mainRows = snap.main && Array.isArray(snap.main.rawOrders) ? snap.main.rawOrders : [];
+            const suikaList = snap.suika && Array.isArray(snap.suika.submissions) ? snap.suika.submissions : [];
+            const jizanList = snap.jizan && Array.isArray(snap.jizan.exportData) ? snap.jizan.exportData : [];
+            if (!mainRows.length && !suikaList.length && !jizanList.length) return { ok: true, empty: true };
+
+            // 1) 主订单：重建 userData/cardStats/图表表格
+            if (mainRows.length) {
+                rawOrdersData = mainRows;
+                const ls = document.getElementById('loadingSection');
+                if (ls) ls.classList.remove('hidden');
+                await processData(rawOrdersData);
+                renderRawData(rawOrdersData);
+                renderCharts();
+                cardStatsPage = 1;
+                renderStatsTables();
+                filteredData = [...userData];
+                renderTable(1);
+                const ls2 = document.getElementById('loadingSection');
+                if (ls2) ls2.classList.add('hidden');
+                const rs = document.getElementById('resultSection');
+                if (rs) rs.classList.remove('hidden');
+                setTimeout(() => { try { Object.values(charts).forEach(c => c.resize()); } catch (e2) {} }, 100);
+            }
+            // 2) 碎卡审核：还原提交+审核终态，user/userMatch 按当前主数据重匹配
+            if (suikaList.length) {
+                suikaSubmissions = suikaList.map(function (s) {
+                    const c = Object.assign({}, s);
+                    if (typeof rawOrdersData !== 'undefined' && rawOrdersData && rawOrdersData.length) {
+                        try {
+                            const mergeOn = document.getElementById('suikaMergePhoneCb') ? document.getElementById('suikaMergePhoneCb').checked : false;
+                            const matched = findUserByPhoneOrderDetail(c.phone, c.orderNo, c.nickname, c.name, mergeOn ? { mergeByPhone: true } : {});
+                            c.user = matched.user;
+                            c.userMatch = matched;
+                        } catch (e3) { c.user = null; c.userMatch = null; }
+                    } else {
+                        c.user = null;
+                        c.userMatch = null;
+                    }
+                    return c;
+                });
+                try {
+                    if (typeof rawOrdersData !== 'undefined' && rawOrdersData && rawOrdersData.length) userCardCountsMap = buildUserCardCounts(rawOrdersData);
+                } catch (e4) {}
+                if (snap.suika.hasOwnProperty('rawCache')) suikaRawDataCache = snap.suika.rawCache;
+                suikaAuditMap = {};
+                suikaSubmissions.forEach(function (s) {
+                    if (s.user) {
+                        if (!suikaAuditMap[s.user.wechat]) suikaAuditMap[s.user.wechat] = [];
+                        suikaAuditMap[s.user.wechat].push(s);
+                    }
+                });
+                renderSuikaResults();
+                const ssr = document.getElementById('suikaResultSection');
+                if (ssr) ssr.classList.remove('hidden');
+            }
+            // 3) 集赞：还原明细并回填宣传礼到 userData
+            if (jizanList.length) {
+                jizanExportData = jizanList;
+                try { if (typeof replayJizanGiftToUsers === 'function') replayJizanGiftToUsers(); } catch (e5) {}
+                try {
+                    if (typeof renderJizanSummary === 'function' && typeof buildJizanSummaryFromExport === 'function') renderJizanSummary(buildJizanSummaryFromExport(), true);
+                } catch (e6) {}
+                const jsr = document.getElementById('jizanResultSection');
+                if (jsr) jsr.classList.remove('hidden');
+            }
+            return { ok: true, empty: false, time: snap.updatedAt || '', by: snap.updatedBy || '' };
+        }
+
+        async function cloudLoadFromServer(silent) {
+            if (!cloudGetToken()) { cloudShowLogin('请先登录'); return; }
+            cloudStatusPill('拉取中…');
+            try {
+                const snap = await cloudGetData();
+                if (!snap || typeof snap !== 'object' || !snap.schema) {
+                    cloudStatusPill('云端暂无已保存数据');
+                    if (!silent) cloudToast('云端暂无数据。可先上传 Excel 分析，系统会自动保存到云端。');
+                    return;
+                }
+                if (!silent) {
+                    const okGo = window.confirm('将从云端载入数据（更新于 ' + (snap.updatedAt || '-') + '，账号 ' + (snap.updatedBy || '-') + '）。\n载入会用云端数据覆盖当前页面内存数据。是否继续？');
+                    if (!okGo) return;
+                }
+                const ret = await cloudApplySnapshot(snap);
+                if (ret.empty) { cloudStatusPill('云端暂无已保存数据'); return; }
+                cloudStatusPill('已载入云端数据（更新于 ' + (ret.time || '-') + '）');
+                if (!silent) alert('云端数据已载入' + (ret.time ? '（更新于 ' + ret.time + '）' : '') + '：主订单、碎卡审核、集赞导入均已恢复。');
+            } catch (e) {
+                if (e && e.status === 401) { cloudStatusPill('登录过期，请重新登录', '#ffd6d6'); cloudShowLogin('登录已过期，请重新登录'); return; }
+                cloudStatusPill('拉取失败（网络/服务异常）', '#ffd6d6');
+                if (!silent) cloudToast('云端数据拉取失败：' + (e && e.message ? e.message : '网络异常'), true);
+            }
+        }
+
+        // ---------- 登录/登出/遮罩 ----------
+        var cloudLoginOverlay = null;
+        function cloudOnUnauthorized() {
+            cloudClearAuth();
+            cloudShowLogin('登录已过期，请重新登录');
+        }
+        function cloudShowLogin(tip) {
+            const tipShow = function (msg) {
+                const tp = document.getElementById('cloudLoginTip');
+                if (tp) { tp.textContent = msg || ''; tp.style.display = 'block'; }
+            };
+            if (cloudLoginOverlay) {
+                cloudLoginOverlay.style.display = 'flex';
+                document.body.style.overflow = 'hidden';
+                if (tip) tipShow(tip);
+                return;
+            }
+            const ov = document.createElement('div');
+            ov.id = 'cloudLoginOverlay';
+            ov.style.cssText = 'position:fixed;inset:0;z-index:11000;display:flex;align-items:center;justify-content:center;background:rgba(15,30,48,0.82);backdrop-filter:blur(3px);';
+            ov.innerHTML =
+                '<div style="background:#fff;border-radius:16px;padding:32px 34px;width:390px;max-width:92vw;box-shadow:0 18px 60px rgba(0,0,0,0.35);font-family:-apple-system,\'Segoe UI\',Roboto,sans-serif;">' +
+                '<div style="font-size:21px;font-weight:bold;color:#20517d;margin-bottom:4px;">🔐 抽抽乐数据审核平台</div>' +
+                '<div style="font-size:13px;color:#888;margin-bottom:18px;">管理员登录后查看 / 云端存取数据</div>' +
+                '<div id="cloudLoginTip" style="display:none;background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;font-size:12px;padding:8px 10px;border-radius:8px;margin-bottom:14px;"></div>' +
+                '<div style="font-size:13px;color:#555;margin-bottom:6px;">账号</div>' +
+                '<select id="cloudLoginUser" style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;margin-bottom:14px;box-sizing:border-box;background:#fff;">' +
+                '<option value="ad001">ad001</option><option value="ad002">ad002</option><option value="ad003">ad003</option><option value="ad004">ad004</option>' +
+                '</select>' +
+                '<div style="font-size:13px;color:#555;margin-bottom:6px;">密码</div>' +
+                '<input type="password" id="cloudLoginPass" placeholder="请输入管理员密码" style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;margin-bottom:20px;box-sizing:border-box;">' +
+                '<button id="cloudLoginBtn" style="width:100%;padding:11px 0;border:none;border-radius:10px;background:linear-gradient(135deg,#20517d,#3b82f6);color:#fff;font-size:15px;font-weight:bold;cursor:pointer;">登 录</button>' +
+                '<div style="font-size:11px;color:#aaa;margin-top:12px;text-align:center;">登录后 token 仅保存在本机浏览器 localStorage</div>' +
+                '</div>';
+            document.body.appendChild(ov);
+            cloudLoginOverlay = ov;
+            const btn = document.getElementById('cloudLoginBtn');
+            const pass = document.getElementById('cloudLoginPass');
+            async function doLogin() {
+                const u = document.getElementById('cloudLoginUser').value;
+                const p = document.getElementById('cloudLoginPass').value;
+                if (!p) { tipShow('请输入密码'); return; }
+                btn.disabled = true;
+                btn.textContent = '登录中…';
+                try {
+                    const json = await cloudLogin(u, p);
+                    cloudSetAuth(json.token, json.username || u);
+                    cloudHideLogin();
+                    cloudRefreshUserBadge();
+                    cloudStatusPill('登录成功，检查云端数据…');
+                    cloudToast('登录成功（' + (json.username || u) + '）');
+                    try { await cloudAutoProbe(); } catch (e2) {}
+                } catch (e) {
+                    const msg = (e && e.message) ? e.message : '登录失败';
+                    tipShow(/401|403|账号|密码/.test(msg) ? '账号或密码错误' : ('登录失败：' + msg));
+                } finally {
+                    btn.disabled = false;
+                    btn.textContent = '登 录';
+                }
+            }
+            btn.addEventListener('click', doLogin);
+            pass.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') doLogin(); });
+            document.body.style.overflow = 'hidden';
+            setTimeout(() => { try { pass.focus(); } catch (e) {} }, 100);
+            if (tip) tipShow(tip);
+        }
+        function cloudHideLogin() {
+            if (cloudLoginOverlay) cloudLoginOverlay.style.display = 'none';
+            document.body.style.overflow = '';
+        }
+        function cloudLogout() {
+            cloudClearAuth();
+            cloudRefreshUserBadge();
+            cloudStatusPill('未登录');
+            cloudShowLogin('已退出登录。重新登录后将检查云端数据');
+        }
+
+        // 登录成功/页面初始化后：探测云端是否有数据，自动载入（页面无本地数据时）
+        async function cloudAutoProbe() {
+            if (!cloudGetToken()) return;
+            try {
+                const snap = await cloudGetData();
+                if (!snap || typeof snap !== 'object' || !snap.schema) {
+                    cloudStatusPill('云端暂无已保存数据');
+                    return;
+                }
+                if (cloudHasAnyData()) {
+                    cloudStatusPill('检测到云端数据（更新于 ' + (snap.updatedAt || '-') + '）');
+                    cloudToast('云端已有数据，可点右上角「从云端载入」核对后载入。');
+                    return;
+                }
+                const okAuto = window.confirm('检测到云端已有数据（更新于 ' + (snap.updatedAt || '-') + '，账号 ' + (snap.updatedBy || '-') + '）。\n是否立即载入？');
+                if (!okAuto) { cloudStatusPill('云端有数据，未自动载入'); return; }
+                const ret = await cloudApplySnapshot(snap);
+                if (!ret.empty) {
+                    cloudStatusPill('已载入云端数据（更新于 ' + (ret.time || '-') + '）');
+                    alert('云端数据已载入：主订单、碎卡审核、集赞导入均已恢复，可直接查看与导出。');
+                }
+            } catch (e) {
+                if (e && e.status === 401) { cloudClearAuth(); cloudRefreshUserBadge(); cloudStatusPill('登录过期'); cloudShowLogin('登录已过期，请重新登录'); return; }
+                cloudStatusPill('云端不可用（网络异常），可本地使用', '#ffd6d6');
+            }
+        }
+
+        // ---------- 顶栏/状态 UI ----------
+        var cloudCloudStatusEl = null;
+        var cloudPillUserEl = null;
+        var cloudPillStatusEl = null;
+
+        function cloudRefreshUserBadge() {
+            if (cloudPillUserEl) cloudPillUserEl.textContent = cloudGetUser() ? ('👤 ' + cloudGetUser()) : '未登录';
+        }
+        function cloudStatusPill(text, warn) {
+            if (cloudPillStatusEl) {
+                cloudPillStatusEl.textContent = '｜' + (text || '');
+                cloudPillStatusEl.style.color = warn ? '#ffd6d6' : '#d9f7e6';
+                return;
+            }
+            if (cloudCloudStatusEl) cloudCloudStatusEl.textContent = text || '';
+        }
+        function cloudInjectUI() {
+            // 底部状态胶囊（账号｜同步状态）
+            const pill = document.createElement('div');
+            pill.style.cssText = 'position:fixed;right:14px;bottom:12px;z-index:9001;background:#1e293b;color:#fff;font-size:12px;padding:7px 14px;border-radius:20px;box-shadow:0 4px 14px rgba(0,0,0,0.25);display:flex;align-items:center;gap:6px;max-width:64vw;cursor:default;';
+            cloudPillUserEl = document.createElement('span');
+            cloudPillStatusEl = document.createElement('span');
+            cloudPillStatusEl.style.color = '#d9f7e6';
+            pill.appendChild(cloudPillUserEl);
+            pill.appendChild(cloudPillStatusEl);
+            document.body.appendChild(pill);
+            cloudCloudStatusEl = pill;
+            cloudRefreshUserBadge();
+
+            // 顶栏右侧操作按钮组
+            const wrap = document.createElement('div');
+            wrap.style.cssText = 'position:fixed;top:12px;right:128px;z-index:9000;display:flex;gap:6px;';
+            const mk = function (txt, fn, bg, title) {
+                const b = document.createElement('button');
+                b.textContent = txt;
+                b.title = title || txt;
+                b.style.cssText = 'padding:8px 12px;border:none;border-radius:20px;font-size:13px;font-weight:bold;cursor:pointer;box-shadow:0 4px 10px rgba(0,0,0,0.18);color:#fff;background:' + (bg || '#334155') + ';';
+                b.addEventListener('click', fn);
+                return b;
+            };
+            wrap.appendChild(mk('⬆ 保存到云端', function () { cloudSaveNow(); }, '#065f46', '立即把当前内存数据（主订单/碎卡/集赞）写入云端同一份数据'));
+            wrap.appendChild(mk('⬇ 从云端载入', function () { cloudLoadFromServer(false); }, '#1d4ed8', '从云端拉取数据并覆盖当前页面（会先确认）'));
+            wrap.appendChild(mk('退出', function () { if (window.confirm('确认退出登录？')) cloudLogout(); }, '#64748b', '清除本机 token 并回到登录页'));
+            document.body.appendChild(wrap);
+        }
+
+        // ---------- 初始化：先登录门禁，token 有效则探测云端 ----------
+        async function cloudInit() {
+            cloudInjectUI();
+            const token = cloudGetToken();
+            if (!token) {
+                cloudStatusPill('未登录');
+                cloudShowLogin('请先登录管理员账号');
+                return;
+            }
+            cloudRefreshUserBadge();
+            cloudStatusPill('校验登录…');
+            try {
+                const snap = await cloudGetData();
+                if (snap && typeof snap === 'object' && snap.schema) {
+                    if (cloudHasAnyData()) {
+                        cloudStatusPill('云端有数据（更新于 ' + (snap.updatedAt || '-') + '），未自动载入');
+                        cloudToast('云端已有数据。可点右上角「从云端载入」用云端数据覆盖本地。');
+                    } else {
+                        const okAuto = window.confirm('检测到云端已有数据（更新于 ' + (snap.updatedAt || '-') + '，账号 ' + (snap.updatedBy || '-') + '）。\n是否立即载入？');
+                        if (okAuto) {
+                            const ret = await cloudApplySnapshot(snap);
+                            if (!ret.empty) {
+                                cloudStatusPill('已载入云端数据（更新于 ' + (ret.time || '-') + '）');
+                                alert('云端数据已载入：主订单、碎卡审核、集赞导入均已恢复，可直接查看与导出。');
+                            }
+                        } else {
+                            cloudStatusPill('云端有数据，未自动载入');
+                        }
+                    }
+                } else {
+                    cloudStatusPill('云端暂无已保存数据');
+                }
+            } catch (e) {
+                if (e && e.status === 401) {
+                    cloudClearAuth();
+                    cloudRefreshUserBadge();
+                    cloudShowLogin('登录已过期，请重新登录');
+                } else {
+                    cloudStatusPill('云端不可用（网络异常），可本地使用', '#ffd6d6');
+                }
+            }
+        }
+
+        cloudInit();
     </script>
 </body>
 </html>
