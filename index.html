@@ -5290,16 +5290,54 @@
             });
         }
 
+        // ---------- 记录级同步辅助（合并冲突/修改时间/内容签名） ----------
+        // 兼容 'YYYY-MM-DD HH:mm:ss'（云端）与 'YYYY/M/D H:mm:ss'（留痕 toLocaleString）两种格式，解析为时间戳比较
+        function cloudParseT(t) {
+            if (!t) return 0;
+            const s = String(t).trim();
+            const m = s.match(/(\d{4})[/\-.](\d{1,2})[/\-.](\d{1,2})(?:[ T](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
+            if (!m) return 0;
+            return Date.UTC(+m[1], +m[2] - 1, +m[3], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0));
+        }
+        // 行内最新一次人工修改/放行/留痕时间（取各字段最大值；0 表示该行从未被人工改过）
+        function cloudRowTime(o) {
+            let best = 0;
+            const upd = function (t) { const n = cloudParseT(t); if (n > best) best = n; };
+            if (!o || typeof o !== 'object') return best;
+            upd(o.editedAt); upd(o.updatedAt); upd(o.releasedAt); upd(o.manualEditedAt);
+            if (o.audit) { upd(o.audit.releasedAt); upd(o.audit.editedAt); upd(o.audit.updatedAt); upd(o.audit.at); }
+            (o.suikaHistory || []).forEach(function (h) { upd(h.at); });
+            if (Array.isArray(o.requests)) o.requests.forEach(function (r) { const n = cloudRowTime(r); if (n > best) best = n; });
+            return best;
+        }
+        // 内容签名：排除两端各自重匹配产生的动态字段，只比“客服实际工作内容”
+        function cloudRowSigOf(o) {
+            try {
+                const clean = {};
+                Object.keys(o || {}).forEach(function (k) {
+                    if (k === 'user' || k === 'userMatch' || k === 'updatedAt' || k === 'matched' || k === 'ambiguous' || k === 'missingInfo' || k === 'accounts' || k === 'wechat' || k === 'matchedKey' || k === 'gift') return;
+                    clean[k] = o[k];
+                });
+                return JSON.stringify(clean);
+            } catch (e) { return ''; }
+        }
+        // 同一条记录两端都改过：按修改时间较晚者保留；无法区分时云端优先（并入覆盖语义）
+        function cloudPickNewerRow(localRow, cloudRow) {
+            const lt = cloudRowTime(localRow);
+            const ct = cloudRowTime(cloudRow);
+            if (lt > ct) return { row: localRow, from: 'local' };
+            return { row: cloudRow, from: 'cloud' };
+        }
+
         function cloudCollectSnapshot() {
-            const has = function (v) { return typeof v !== 'undefined' && v !== null && v !== false; };
+            // v2：只同步记录小表（碎卡审核提交 / 集赞礼兑明细），6.8万行主订单本地导入不上云
             return {
-                schema: 'gacha-order-analysis/v1',
+                schema: 'gacha-order-analysis/v2',
                 updatedAt: cloudNowText(),
                 updatedBy: cloudGetUser() || 'unknown',
-                main: { rawOrders: (typeof rawOrdersData !== 'undefined' && Array.isArray(rawOrdersData)) ? rawOrdersData : [] },
                 suika: {
-                    submissions: cloudSanitizeSubmissions(typeof suikaSubmissions !== 'undefined' ? suikaSubmissions : null),
-                    rawCache: has(suikaRawDataCache) ? suikaRawDataCache : null
+                    submissions: cloudSanitizeSubmissions(typeof suikaSubmissions !== 'undefined' ? suikaSubmissions : []),
+                    rawCache: (typeof suikaRawDataCache !== 'undefined') ? suikaRawDataCache : null
                 },
                 jizan: { exportData: (typeof jizanExportData !== 'undefined' && Array.isArray(jizanExportData)) ? jizanExportData : [] }
             };
@@ -5307,7 +5345,7 @@
 
         function cloudHasAnyData() {
             try {
-                if (typeof rawOrdersData !== 'undefined' && rawOrdersData && rawOrdersData.length) return true;
+                // 仅记录小表：6.8万行主订单本地导入不上云，也不作为“可保存”依据（避免误传空记录清空云端）
                 if (typeof suikaSubmissions !== 'undefined' && suikaSubmissions && suikaSubmissions.length) return true;
                 if (typeof jizanExportData !== 'undefined' && jizanExportData && jizanExportData.length) return true;
             } catch (e) {}
@@ -5334,7 +5372,7 @@
                     if (e && e.status === 409) {
                         const by = e.cloudUpdatedBy || '他人';
                         const at = e.cloudUpdatedAt || '-';
-                        const okForce = window.confirm('云端数据已被「' + by + '」更新（' + at + '）。\n若强制保存将覆盖对方刚保存的内容。\n建议先点「从云端载入」核对合并后再保存。\n\n是否仍要强制覆盖保存？');
+                        const okForce = window.confirm('云端记录已被「' + by + '」更新（' + at + '）。\n若强制保存将覆盖对方刚保存的记录。\n建议先点「拉取记录合并」，把对方记录并入本地后再保存。\n\n是否仍要强制覆盖保存？');
                         if (!okForce) { cloudStatusPill('已取消覆盖（云端有他人更新）', '#ffd6d6'); return; }
                         await cloudPutData(snap, true); // 用户确认强制覆盖
                     } else { throw e; }
@@ -5354,53 +5392,70 @@
             }
         }
 
-        // ---------- 载入云端快照 -> 内存/渲染 ----------
+        // ---------- 合并云端记录 -> 本地（云端并入本地：只增改、不删除；冲突按修改时间较晚者保留） ----------
         async function cloudApplySnapshot(snap) {
             if (!snap || typeof snap !== 'object') return { ok: true, empty: true };
-            const mainRows = snap.main && Array.isArray(snap.main.rawOrders) ? snap.main.rawOrders : [];
             const suikaList = snap.suika && Array.isArray(snap.suika.submissions) ? snap.suika.submissions : [];
             const jizanList = snap.jizan && Array.isArray(snap.jizan.exportData) ? snap.jizan.exportData : [];
-            if (!mainRows.length && !suikaList.length && !jizanList.length) return { ok: true, empty: true };
+            const v1Main = snap.main && Array.isArray(snap.main.rawOrders) && snap.main.rawOrders.length ? snap.main.rawOrders : [];
+            if (!v1Main.length && !suikaList.length && !jizanList.length) return { ok: true, empty: true };
 
-            // 1) 主订单：重建 userData/cardStats/图表表格
-            if (mainRows.length) {
-                rawOrdersData = mainRows;
-                const ls = document.getElementById('loadingSection');
-                if (ls) ls.classList.remove('hidden');
-                await processData(rawOrdersData);
-                renderRawData(rawOrdersData);
-                renderCharts();
-                cardStatsPage = 1;
-                renderStatsTables();
-                filteredData = [...userData];
-                renderTable(1);
-                const ls2 = document.getElementById('loadingSection');
-                if (ls2) ls2.classList.add('hidden');
-                const rs = document.getElementById('resultSection');
-                if (rs) rs.classList.remove('hidden');
-                setTimeout(() => { try { Object.values(charts).forEach(c => c.resize()); } catch (e2) {} }, 100);
+            const stats = { suikaAdd: 0, suikaUpd: 0, suikaConflict: 0, jizanAdd: 0, jizanUpd: 0, jizanConflict: 0 };
+
+            // 兼容 v1 老快照：本地未导主订单时才导入，已导订单绝不覆盖（订单大表本地为准）
+            if (v1Main.length && (!(typeof rawOrdersData !== 'undefined') || !rawOrdersData || !rawOrdersData.length)) {
+                try {
+                    rawOrdersData = v1Main;
+                    const ls = document.getElementById('loadingSection');
+                    if (ls) ls.classList.remove('hidden');
+                    await processData(rawOrdersData);
+                    renderRawData(rawOrdersData);
+                    renderCharts();
+                    cardStatsPage = 1;
+                    renderStatsTables();
+                    filteredData = [...userData];
+                    renderTable(1);
+                    const ls2 = document.getElementById('loadingSection');
+                    if (ls2) ls2.classList.add('hidden');
+                    const rs = document.getElementById('resultSection');
+                    if (rs) rs.classList.remove('hidden');
+                    setTimeout(() => { try { Object.values(charts).forEach(c => c.resize()); } catch (e2) {} }, 100);
+                } catch (e1) {}
             }
-            // 2) 碎卡审核：还原提交+审核终态，user/userMatch 按当前主数据重匹配
+
+            // 1) 碎卡审核提交记录合并：同一条 = 提交编号 code（行内含 audit/人工放行/修改历史，随行同步）
             if (suikaList.length) {
-                suikaSubmissions = suikaList.map(function (s) {
-                    const c = Object.assign({}, s);
+                if (!Array.isArray(suikaSubmissions)) suikaSubmissions = [];
+                const idxLocal = {};
+                suikaSubmissions.forEach(function (s) { if (s && String(s.code || '') !== '') idxLocal[String(s.code)] = s; });
+                const merged = suikaSubmissions.slice();
+                suikaList.forEach(function (cs) {
+                    if (!cs || typeof cs !== 'object') return;
+                    const code = String(cs.code || '');
+                    const lr = code ? idxLocal[code] : null;
+                    if (!lr) { merged.push(cs); stats.suikaAdd++; return; }
+                    if (cloudRowSigOf(lr) === cloudRowSigOf(cs)) return;
+                    const lt = cloudRowTime(lr), ct = cloudRowTime(cs);
+                    if (lt && ct && lt !== ct) stats.suikaConflict++;
+                    const pick = cloudPickNewerRow(lr, cs);
+                    const pos = merged.indexOf(lr);
+                    if (pos >= 0) merged[pos] = pick.row; else merged.push(pick.row);
+                    stats.suikaUpd++;
+                });
+                suikaSubmissions = merged;
+                // 原始提交表缓存：仅本地为空时采纳云端，避免旧批次覆盖新导入批次
+                if (snap.suika && snap.suika.rawCache && !(suikaRawDataCache && suikaRawDataCache.length)) suikaRawDataCache = snap.suika.rawCache;
+                // 按当前主订单重匹配 + 重建索引 + 渲染（主数据缺失时 user 置空，不影响审核结果展示）
+                suikaSubmissions.forEach(function (s) {
                     if (typeof rawOrdersData !== 'undefined' && rawOrdersData && rawOrdersData.length) {
                         try {
                             const mergeOn = document.getElementById('suikaMergePhoneCb') ? document.getElementById('suikaMergePhoneCb').checked : false;
-                            const matched = findUserByPhoneOrderDetail(c.phone, c.orderNo, c.nickname, c.name, mergeOn ? { mergeByPhone: true } : {});
-                            c.user = matched.user;
-                            c.userMatch = matched;
-                        } catch (e3) { c.user = null; c.userMatch = null; }
-                    } else {
-                        c.user = null;
-                        c.userMatch = null;
-                    }
-                    return c;
+                            const matched = findUserByPhoneOrderDetail(s.phone, s.orderNo, s.nickname, s.name, mergeOn ? { mergeByPhone: true } : {});
+                            s.user = matched.user; s.userMatch = matched;
+                        } catch (e3) { s.user = null; s.userMatch = null; }
+                    } else { s.user = null; s.userMatch = null; }
                 });
-                try {
-                    if (typeof rawOrdersData !== 'undefined' && rawOrdersData && rawOrdersData.length) userCardCountsMap = buildUserCardCounts(rawOrdersData);
-                } catch (e4) {}
-                if (snap.suika.hasOwnProperty('rawCache')) suikaRawDataCache = snap.suika.rawCache;
+                try { if (typeof rawOrdersData !== 'undefined' && rawOrdersData && rawOrdersData.length) userCardCountsMap = buildUserCardCounts(rawOrdersData); } catch (e4) {}
                 suikaAuditMap = {};
                 suikaSubmissions.forEach(function (s) {
                     if (s.user) {
@@ -5412,9 +5467,28 @@
                 const ssr = document.getElementById('suikaResultSection');
                 if (ssr) ssr.classList.remove('hidden');
             }
-            // 3) 集赞：还原明细并回填宣传礼到 userData
+
+            // 2) 集赞礼兑明细合并：同一条 = 来源Sheet+手机号+订单号+卡面（行内含 manualStatus/人工修改历史，随行同步）
             if (jizanList.length) {
-                jizanExportData = jizanList;
+                if (!Array.isArray(jizanExportData)) jizanExportData = [];
+                const jk = function (e) { return (e.sheet || '') + '|' + String(e.phone || '').trim() + '|' + String(e.orderNo || '').trim() + '|' + String(e.card || '').trim(); };
+                const idxLocalMap = {};
+                jizanExportData.forEach(function (e, i) { if (e) { const k = jk(e); if (!(k in idxLocalMap)) idxLocalMap[k] = i; } });
+                const merged = jizanExportData.slice();
+                jizanList.forEach(function (ce) {
+                    if (!ce || typeof ce !== 'object') return;
+                    const k = jk(ce);
+                    const li = (k in idxLocalMap) ? idxLocalMap[k] : -1;
+                    if (li < 0) { merged.push(ce); stats.jizanAdd++; return; }
+                    const lr = merged[li];
+                    if (cloudRowSigOf(lr) === cloudRowSigOf(ce)) return;
+                    const lt = cloudRowTime(lr), ct = cloudRowTime(ce);
+                    if (lt && ct && lt !== ct) stats.jizanConflict++;
+                    const pick = cloudPickNewerRow(lr, ce);
+                    merged[li] = pick.row;
+                    stats.jizanUpd++;
+                });
+                jizanExportData = merged;
                 try { if (typeof replayJizanGiftToUsers === 'function') replayJizanGiftToUsers(); } catch (e5) {}
                 try {
                     if (typeof renderJizanSummary === 'function' && typeof buildJizanSummaryFromExport === 'function') renderJizanSummary(buildJizanSummaryFromExport(), true);
@@ -5422,7 +5496,7 @@
                 const jsr = document.getElementById('jizanResultSection');
                 if (jsr) jsr.classList.remove('hidden');
             }
-            return { ok: true, empty: false, time: snap.updatedAt || '', by: snap.updatedBy || '' };
+            return { ok: true, empty: false, stats: stats, time: snap.updatedAt || '', by: snap.updatedBy || '' };
         }
 
         async function cloudLoadFromServer(silent) {
@@ -5435,14 +5509,22 @@
                     if (!silent) cloudToast('云端暂无数据。可先上传 Excel 分析，系统会自动保存到云端。');
                     return;
                 }
-                if (!silent) {
-                    const okGo = window.confirm('将从云端载入数据（更新于 ' + (snap.updatedAt || '-') + '，账号 ' + (snap.updatedBy || '-') + '）。\n载入会用云端数据覆盖当前页面内存数据。是否继续？');
-                    if (!okGo) return;
-                }
                 const ret = await cloudApplySnapshot(snap);
                 if (ret.empty) { cloudStatusPill('云端暂无已保存数据'); return; }
-                cloudStatusPill('已载入云端数据（更新于 ' + (ret.time || '-') + '）');
-                if (!silent) alert('云端数据已载入' + (ret.time ? '（更新于 ' + ret.time + '）' : '') + '：主订单、碎卡审核、集赞导入均已恢复。');
+                const st = ret.stats || {};
+                const totalNew = (st.suikaAdd || 0) + (st.jizanAdd || 0);
+                const totalUpd = (st.suikaUpd || 0) + (st.jizanUpd || 0);
+                const totalCf = (st.suikaConflict || 0) + (st.jizanConflict || 0);
+                cloudStatusPill('已合并云端记录（更新于 ' + (ret.time || '-') + '）');
+                if (!silent) {
+                    alert('云端记录已合并到当前页面（更新于 ' + (ret.time || '-') + '，账号 ' + (ret.by || '-') + '）：\n' +
+                        '· 碎卡审核：新增 ' + (st.suikaAdd || 0) + ' 条、更新 ' + (st.suikaUpd || 0) + ' 条\n' +
+                        '· 集赞礼兑：新增 ' + (st.jizanAdd || 0) + ' 条、更新 ' + (st.jizanUpd || 0) + ' 条\n' +
+                        (totalCf ? '· 两端都修改过、已按较新者保留 ' + totalCf + ' 条\n' : '') +
+                        '只增改不删除，本地未被云端覆盖的记录均保留。');
+                } else if (totalNew + totalUpd > 0) {
+                    cloudToast('云端记录已合并：新增 ' + totalNew + ' 条、更新 ' + totalUpd + ' 条');
+                }
             } catch (e) {
                 if (e && e.status === 401) { cloudStatusPill('登录过期，请重新登录', '#ffd6d6'); cloudShowLogin('登录已过期，请重新登录'); return; }
                 cloudStatusPill('拉取失败（网络/服务异常）', '#ffd6d6');
@@ -5535,6 +5617,45 @@
         }
 
         // 登录成功/页面初始化后：探测云端是否有数据，自动载入（页面无本地数据时）
+        // 云合并多阶段弹窗：onCreated 里通过 setTitle/setBody/setButtons/done 控制弹窗内容
+        function cloudMergeDialog(opts) {
+            return new Promise(function (resolve) {
+                const old = document.getElementById('cloudMergeOverlay');
+                if (old && old.parentNode) old.parentNode.removeChild(old);
+                const ov = document.createElement('div');
+                ov.id = 'cloudMergeOverlay';
+                ov.style.cssText = 'position:fixed;inset:0;z-index:11500;display:flex;align-items:center;justify-content:center;background:rgba(15,30,48,0.74);backdrop-filter:blur(2px);';
+                const box = document.createElement('div');
+                box.style.cssText = 'background:#fff;border-radius:16px;padding:26px 30px;width:450px;max-width:92vw;box-shadow:0 18px 60px rgba(0,0,0,0.35);font-family:-apple-system,\'Segoe UI\',Roboto,sans-serif;';
+                box.innerHTML = '<div id="cloudMergeTitle" style="font-size:18px;font-weight:bold;color:#20517d;margin-bottom:12px;"></div>' +
+                    '<div id="cloudMergeBody" style="font-size:13px;color:#444;line-height:1.8;max-height:52vh;overflow:auto;white-space:pre-wrap;"></div>' +
+                    '<div id="cloudMergeBtns" style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px;flex-wrap:wrap;"></div>';
+                ov.appendChild(box);
+                document.body.appendChild(ov);
+                const T = document.getElementById('cloudMergeTitle');
+                const B = document.getElementById('cloudMergeBody');
+                const W = document.getElementById('cloudMergeBtns');
+                const api = {
+                    setTitle: function (t) { T.textContent = t; },
+                    setBody: function (h) { B.innerHTML = h; },
+                    setButtons: function (list) {
+                        W.innerHTML = '';
+                        list.forEach(function (b) {
+                            const btn = document.createElement('button');
+                            btn.textContent = b.label;
+                            btn.style.cssText = 'padding:9px 18px;border:none;border-radius:9px;cursor:pointer;font-size:14px;font-weight:bold;background:' + (b.primary ? 'linear-gradient(135deg,#20517d,#3b82f6);color:#fff' : '#e2e8f0;color:#334155') + ';';
+                            if (b.disabled) { btn.disabled = true; btn.style.opacity = '0.6'; }
+                            btn.addEventListener('click', function () { if (ov.parentNode) ov.parentNode.removeChild(ov); resolve(b.value); });
+                            W.appendChild(btn);
+                        });
+                    },
+                    done: function (val) { if (ov.parentNode) ov.parentNode.removeChild(ov); resolve(val); }
+                };
+                if (opts.onCreated) opts.onCreated(api);
+            });
+        }
+
+        // 登录后自动探测云端：有记录则弹窗询问合并（可跳过），合并分阶段展示进度与摘要
         async function cloudAutoProbe() {
             if (!cloudGetToken()) return;
             try {
@@ -5543,18 +5664,41 @@
                     cloudStatusPill('云端暂无已保存数据');
                     return;
                 }
-                if (cloudHasAnyData()) {
-                    cloudStatusPill('检测到云端数据（更新于 ' + (snap.updatedAt || '-') + '）');
-                    cloudToast('云端已有数据，可点右上角「从云端载入」核对后载入。');
-                    return;
-                }
-                const okAuto = window.confirm('检测到云端已有数据（更新于 ' + (snap.updatedAt || '-') + '，账号 ' + (snap.updatedBy || '-') + '）。\n是否立即载入？');
-                if (!okAuto) { cloudStatusPill('云端有数据，未自动载入'); return; }
-                const ret = await cloudApplySnapshot(snap);
-                if (!ret.empty) {
-                    cloudStatusPill('已载入云端数据（更新于 ' + (ret.time || '-') + '）');
-                    alert('云端数据已载入：主订单、碎卡审核、集赞导入均已恢复，可直接查看与导出。');
-                }
+                const suikaCount = snap.suika && Array.isArray(snap.suika.submissions) ? snap.suika.submissions.length : 0;
+                const jizanCount = snap.jizan && Array.isArray(snap.jizan.exportData) ? snap.jizan.exportData.length : 0;
+                if (!suikaCount && !jizanCount) { cloudStatusPill('云端暂无记录数据'); return; }
+                // 阶段1：概要询问（可跳过）
+                const want = await cloudMergeDialog({ onCreated: function (c) {
+                    c.setTitle('云端发现上一班记录，是否合并？');
+                    c.setBody('来源账号：' + (snap.updatedBy || '-') + '\n保存时间：' + (snap.updatedAt || '-' ) + '\n云端记录：碎卡审核 ' + suikaCount + ' 条、集赞礼兑 ' + jizanCount + ' 条\n\n合并规则：只增改、不删除本地记录；同一条记录两端都改过时，保留修改时间较晚的一方。\n\n可跳过：本地已有较新数据或想稍后再合并，可点「暂不合并」，之后在右上角手动拉取。');
+                    c.setButtons([{ label: '暂不合并', value: 'skip' }, { label: '开始合并', value: 'go', primary: true }]);
+                } });
+                if (want !== 'go') { cloudStatusPill('已跳过云端记录合并（可点右上角手动拉取）'); return; }
+                // 阶段2：合并中（分阶段文字进度）
+                cloudMergeDialog({ onCreated: function (c) {
+                    c.setTitle('正在合并云端记录…');
+                    c.setBody('⏳ 正在比对碎卡审核记录…\n⏳ 正在比对集赞礼兑记录…\n⏳ 正在刷新页面统计…');
+                    c.setButtons([]);
+                    setTimeout(async function () {
+                        try {
+                            const ret = await cloudApplySnapshot(snap);
+                            const st = ret.stats || {};
+                            const sum = (st.suikaAdd || 0) + (st.suikaUpd || 0) + (st.jizanAdd || 0) + (st.jizanUpd || 0);
+                            c.setTitle('合并完成');
+                            c.setBody('碎卡审核：新增 ' + (st.suikaAdd || 0) + ' 条、更新 ' + (st.suikaUpd || 0) + ' 条\n' +
+                                '集赞礼兑：新增 ' + (st.jizanAdd || 0) + ' 条、更新 ' + (st.jizanUpd || 0) + ' 条\n' +
+                                (((st.suikaConflict || 0) + (st.jizanConflict || 0)) ? '两端都改过、已按较新者保留 ' + ((st.suikaConflict || 0) + (st.jizanConflict || 0)) + ' 条\n' : '') +
+                                '\n' + (sum > 0 ? '本地记录只增改、未删除任何数据。\n本班可继续导入新数据或直接导出。' : '本地记录已是最新，无需变化。'));
+                            c.setButtons([{ label: '知道了', value: 'ok', primary: true }]);
+                            if (sum === 0) cloudStatusPill('云端记录与本地一致');
+                            else cloudStatusPill('已合并云端记录（更新于 ' + (ret.time || '-') + '）');
+                        } catch (err) {
+                            c.setTitle('合并失败');
+                            c.setBody('合并过程中发生错误：' + (err && err.message ? err.message : '未知错误') + '\n本地数据未受影响。');
+                            c.setButtons([{ label: '知道了', value: 'ok', primary: true }]);
+                        }
+                    }, 40);
+                } });
             } catch (e) {
                 if (e && e.status === 401) { cloudClearAuth(); cloudRefreshUserBadge(); cloudStatusPill('登录过期'); cloudShowLogin('登录已过期，请重新登录'); return; }
                 cloudStatusPill('云端不可用（网络异常），可本地使用', '#ffd6d6');
@@ -5601,8 +5745,8 @@
                 b.addEventListener('click', fn);
                 return b;
             };
-            wrap.appendChild(mk('⬆ 保存到云端', function () { cloudSaveNow(); }, '#065f46', '立即把当前内存数据（主订单/碎卡/集赞）写入云端同一份数据'));
-            wrap.appendChild(mk('⬇ 从云端载入', function () { cloudLoadFromServer(false); }, '#1d4ed8', '从云端拉取数据并覆盖当前页面（会先确认）'));
+            wrap.appendChild(mk('⬆ 保存到云端', function () { cloudSaveNow(); }, '#065f46', '把碎卡审核/集赞礼兑记录（小表）写入云端；订单大表本地导入不上云'));
+            wrap.appendChild(mk('⬇ 拉取记录合并', function () { cloudLoadFromServer(false); }, '#1d4ed8', '拉取云端上一班记录，并入当前页面（只增改不删除）'));
             wrap.appendChild(mk('退出', function () { if (window.confirm('确认退出登录？')) cloudLogout(); }, '#64748b', '清除本机 token 并回到登录页'));
             document.body.appendChild(wrap);
         }
