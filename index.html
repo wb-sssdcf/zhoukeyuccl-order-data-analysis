@@ -5227,9 +5227,6 @@
                 if (resp.status === 401) cloudOnUnauthorized();
                 const err = new Error('HTTP ' + resp.status + (text ? ' ' + String(text).slice(0, 200) : ''));
                 err.status = resp.status;
-                if (text) {
-                    try { const je = JSON.parse(text); Object.keys(je).forEach(function (k) { if (k !== 'error') err[k] = je[k]; }); } catch (e2) {}
-                }
                 throw err;
             }
             if (!text) return {};
@@ -5243,18 +5240,12 @@
         async function cloudGetData() {
             const json = await cloudRequest('/api/data', 'GET');
             const d = json && json.hasOwnProperty('data') ? json.data : json;
-            if (d && typeof d === 'object' && !Array.isArray(d)) {
-                if (d.updatedAt) cloudLastSeenAt = d.updatedAt; // 记住当前看到的云端版本
-                return d;
-            }
-            return null;
+            return (d && typeof d === 'object' && !Array.isArray(d)) ? d : null;
         }
-        // baseUpdatedAt: 客户端上次看到的云端版本；云端不一致时返 409，确认后 force=true 强制覆盖
-        async function cloudPutData(snapshot, force) {
-            return await cloudRequest('/api/data', 'PUT', { data: snapshot, baseUpdatedAt: cloudLastSeenAt, force: !!force });
+        async function cloudPutData(snapshot) {
+            return await cloudRequest('/api/data', 'PUT', { data: snapshot });
         }
 
-        var cloudLastSeenAt = null; // 客户端基准版本 = 最近一次 GET/PUT 看到的云端 updatedAt
         var cloudSavingTimer = null;
         var cloudSavingBusy = false;
         var cloudToastTimer = null;
@@ -5366,18 +5357,7 @@
             cloudStatusPill('保存中…');
             try {
                 const snap = cloudCollectSnapshot();
-                try {
-                    await cloudPutData(snap);
-                } catch (e) {
-                    if (e && e.status === 409) {
-                        const by = e.cloudUpdatedBy || '他人';
-                        const at = e.cloudUpdatedAt || '-';
-                        const okForce = window.confirm('云端记录已被「' + by + '」更新（' + at + '）。\n若强制保存将覆盖对方刚保存的记录。\n建议先点「拉取记录合并」，把对方记录并入本地后再保存。\n\n是否仍要强制覆盖保存？');
-                        if (!okForce) { cloudStatusPill('已取消覆盖（云端有他人更新）', '#ffd6d6'); return; }
-                        await cloudPutData(snap, true); // 用户确认强制覆盖
-                    } else { throw e; }
-                }
-                cloudLastSeenAt = snap.updatedAt; // 本次保存成为新的基准版本
+                await cloudPutData(snap);
                 cloudStatusPill('已同步 ' + snap.updatedAt);
             } catch (e) {
                 if (e && e.status === 401) {
