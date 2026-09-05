@@ -4456,8 +4456,11 @@
                 + stepBox('4', '以本地覆盖云端（橙色）', li('<b>适用场景</b>：本地这份数据才是权威版本，需要整份替换云端时（例如修复一批脏数据后）；') + li('<b>与「拉取合并」的区别</b>：拉取是“并入”，覆盖是“替换”；覆盖不会先拉取云端再合并。'), warn('危险操作：云端旧记录会被本页数据整份替换且<b>不可恢复</b>。执行前务必先导出本地备份，再点确定。'))
                 + stepBox('5', '清空云端审核数据（红色）', li('<b>适用场景</b>：彻底重置云端小表（如清理测试脏数据）；') + li('<b>影响范围</b>：仅清空云端的碎卡审核/集赞记录（写为空快照）；账号、云端日志、各电脑本地数据均不受影响。'), warn('执行后有二次确认弹窗；清空后如需恢复，请让有本地备份的人点「以本地覆盖云端」重新上传。'))
                 + stepBox('6', '账号管理建议', li('<b>超管账号</b>只交给总负责人；普通管理员账号按人分配、不混用；') + li('密码建议私聊发送、定期更换；不要在公用电脑上保持登录状态；') + li('发现普通管理员有越权/误操作嫌疑时，用「云端日志」核对操作记录。'));
-            const tabBtn = (id, label, act) => `<button type="button" id="${id}" onclick="usageShowTab('${act}')" style="padding:7px 14px;border:none;border-radius:18px;font-size:13px;font-weight:bold;cursor:pointer;${act === 'normal' ? 'background:#20517d;color:#fff;' : 'background:#eef2f7;color:#64748b;'}">${label}</button>`;
             const isSuperNow = !!(window.cloudIsSuper && cloudIsSuper());
+            const tabBtn = (id, label, act) => {
+                const on = (act === 'normal') ? !isSuperNow : isSuperNow;
+                return `<button type="button" id="${id}" onclick="usageShowTab('${act}')" style="padding:7px 14px;border:none;border-radius:18px;font-size:13px;font-weight:bold;cursor:pointer;${on ? 'background:#20517d;color:#fff;' : 'background:#eef2f7;color:#64748b;'}">${label}</button>`;
+            };
             const bodyHtml =
                 '<div style="display:flex;gap:8px;margin-bottom:12px;">' + tabBtn('usageTabNormal', '📘 普通管理员说明', 'normal') + tabBtn('usageTabSuper', '👑 超管专属说明', 'super') + '</div>'
                 + '<div id="usagePanelNormal" style="display:' + (isSuperNow ? 'none' : 'block') + ';">' + normalHtml + '</div>'
