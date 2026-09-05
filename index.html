@@ -4416,34 +4416,53 @@
             const el = document.getElementById('suikaEditModalWrap');
             if (el) el.remove();
         }
-        // 页面右上角「📖 使用说明」弹窗：四步操作引导（复用 suikaModalShell 自绘弹窗）
+        // 页面右上角「📖 使用说明」弹窗：按「普通管理员 / 超级管理员」分 Tab 展示（复用 suikaModalShell 自绘弹窗）
+        function usageShowTab(kind) {
+            const n = document.getElementById('usagePanelNormal');
+            const s = document.getElementById('usagePanelSuper');
+            const tn = document.getElementById('usageTabNormal');
+            const ts = document.getElementById('usageTabSuper');
+            if (!n || !s) return;
+            n.style.display = (kind === 'normal') ? 'block' : 'none';
+            s.style.display = (kind === 'super') ? 'block' : 'none';
+            const base = 'padding:7px 14px;border:none;border-radius:18px;font-size:13px;font-weight:bold;cursor:pointer;';
+            if (tn) tn.style.cssText = base + ((kind === 'normal') ? 'background:#20517d;color:#fff;' : 'background:#eef2f7;color:#64748b;');
+            if (ts) ts.style.cssText = base + ((kind === 'super') ? 'background:#20517d;color:#fff;' : 'background:#eef2f7;color:#64748b;');
+        }
         function showUsageGuide() {
-            const stepBox = (num, title, linesHtml) => `
+            const stepBox = (num, title, linesHtml, tipHtml) => `
                 <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:12px 14px;margin-bottom:10px;">
                     <div style="font-weight:bold;font-size:14px;color:#20517d;margin-bottom:6px;">${num}、${title}</div>
                     <div style="font-size:13px;line-height:1.9;color:#333;">${linesHtml}</div>
+                    ${tipHtml || ''}
                 </div>`;
             const li = (html) => `<div style="padding-left:2px;">${html}</div>`;
+            const tip = (html) => `<div style="margin-top:7px;padding:6px 10px;background:#fff7e6;border:1px solid #ffe1a6;border-radius:8px;font-size:12px;line-height:1.8;color:#7c4a03;">💡 ${html}</div>`;
+            const warn = (html) => `<div style="margin-top:7px;padding:6px 10px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;font-size:12px;line-height:1.8;color:#991b1b;">⚠️ ${html}</div>`;
+            // —— 普通管理员说明 ——
+            const normalHtml =
+                stepBox('1', '登录与账号安全', li('① 使用对接人发给您的<code>账号密码</code>登录；') + li('② 密码属于内部信息，请勿转发给无关人员；') + li('③ 换班/下班请点右上角「退出」，避免他人误用您的账号。'))
+                + stepBox('2', '导入数据（每天第一步）', li('① 上传<code>主数据 Excel（订单数据）</code>，点击「开始分析」（订单大表仅在您自己电脑上分析，<b>不会上传云端</b>）；') + li('② 有碎卡兑换时：上传<code>碎卡记录</code>，点击「开始导入」；') + li('③ 有集赞兑换时：上传<code>集赞兑换表</code>，点击「开始导入」。') + li('④ 三类数据可同时存在页面中，各自独立处理。'), tip('重复导入会覆盖本地同类数据。如需保留上一版，请先导出备份，再重新导入。'))
+                + stepBox('3', '碎卡兑换审核', li('<b>修改</b>：用户填错或需调整时，点行尾「修改」修正（系统自动留痕）；') + li('<b>放行</b>：确认无误但被规则卡住的记录，点「放行」；') + li('<b>导出审核结果 Excel</b>：完整审核明细，发货用；') + li('<b>导出未匹配用户清单</b>：找不到下单人的，需私信核实后处理；') + li('<b>导出修改记录</b>：客服所有改动留痕，对账用。'))
+                + stepBox('4', '集赞兑换核对', li('<b>明细行「修改」</b>：联系用户确认后修正手机号/卡面/状态（会留痕）；') + li('<b>导出集赞导入结果 Excel</b>：内部完整版（含全部明细 + 修改记录）；') + li('<b>导出来豹接龙查询表</b>：发给用户自助查询的表（含集赞修改记录）；') + li('<b>导出集赞核心信息查询表</b>：精简版，适合快速核对。'))
+                + stepBox('5', '换班交接：保存与拉取', li('<b>下班/交班前</b>：点右上角「⬆ 保存到云端」，把本班审核结果上传；') + li('<b>接班时</b>：点右上角「⬇ 拉取记录合并」，把云端上一班记录并入当前页面（只增改不删除）；') + li('<b>保存/拉取成功后</b>：右下角浮窗会显示最新保存时间与账号，可核对是否轮到您。'), tip('云端同步的是<b>碎卡审核 + 集赞兑换</b>这类小表；订单大表留在各自电脑本地，不上云端。'))
+                + stepBox('6', '查看修改历史与凭证', li('<b>页面下方「修改历史」</b>：每次修改/放行的完整时间线（按时间倒序）；') + li('<b>所有导出 Excel 的备注/记录 Sheet</b>：事后对账凭证。'))
+                + stepBox('7', '常见问题', li('<b>保存/拉取失败</b>：多为网络波动，点「拉取记录合并」或「保存到云端」重试；仍失败请截图给管理员；') + li('<b>看不到云端日志等按钮</b>：属正常现象，那些是超级管理员专属功能；') + li('<b>不确定当前页面是不是最新</b>：接班先「拉取记录合并」，下班前确认「保存到云端」成功。'));
+            // —— 超级管理员说明 ——
+            const superHtml =
+                stepBox('1', '账号体系', li('<b>超级管理员</b>：ad001（及备用 s1）——唯一能看到下方「☰ 更多」里的云端管理功能；') + li('<b>普通管理员</b>：ad002 ~ ad005——只负责日常审核与交接，看不到云端管理入口。'))
+                + stepBox('2', '顶部按钮布局（本次优化后）', li('常驻按钮：<code>⬆ 保存到云端</code>、<code>⬇ 拉取记录合并</code>（所有角色都有）；') + li('低频/管理操作收进 <code>☰ 更多</code> 下拉：以本地覆盖云端、清空云端审核数据、云端日志、退出登录；') + li('点击「☰ 更多」展开菜单，点菜单外空白处或再次点击按钮可收起。'))
+                + stepBox('3', '云端日志（紫色）', li('<b>作用</b>：查看最近 200 条云端操作记录（谁在何时保存/覆盖/清空）；') + li('<b>筛选</b>：按账号、日期、关键字筛选；') + li('<b>删除</b>：可单条删除；「清空全部」会保留一条“清空日志”的审计记录，方便追责。'), tip('轮班期间如发现异常保存/覆盖，优先查云端日志定位账号与时间。'))
+                + stepBox('4', '以本地覆盖云端（橙色）', li('<b>适用场景</b>：本地这份数据才是权威版本，需要整份替换云端时（例如修复一批脏数据后）；') + li('<b>与「拉取合并」的区别</b>：拉取是“并入”，覆盖是“替换”；覆盖不会先拉取云端再合并。'), warn('危险操作：云端旧记录会被本页数据整份替换且<b>不可恢复</b>。执行前务必先导出本地备份，再点确定。'))
+                + stepBox('5', '清空云端审核数据（红色）', li('<b>适用场景</b>：彻底重置云端小表（如清理测试脏数据）；') + li('<b>影响范围</b>：仅清空云端的碎卡审核/集赞记录（写为空快照）；账号、云端日志、各电脑本地数据均不受影响。'), warn('执行后有二次确认弹窗；清空后如需恢复，请让有本地备份的人点「以本地覆盖云端」重新上传。'))
+                + stepBox('6', '账号管理建议', li('<b>超管账号</b>只交给总负责人；普通管理员账号按人分配、不混用；') + li('密码建议私聊发送、定期更换；不要在公用电脑上保持登录状态；') + li('发现普通管理员有越权/误操作嫌疑时，用「云端日志」核对操作记录。'));
+            const tabBtn = (id, label, act) => `<button type="button" id="${id}" onclick="usageShowTab('${act}')" style="padding:7px 14px;border:none;border-radius:18px;font-size:13px;font-weight:bold;cursor:pointer;${act === 'normal' ? 'background:#20517d;color:#fff;' : 'background:#eef2f7;color:#64748b;'}">${label}</button>`;
+            const isSuperNow = !!(window.cloudIsSuper && cloudIsSuper());
             const bodyHtml =
-                stepBox('第一步', '导入数据（按顺序）',
-                    li('① 上传主数据 Excel（订单数据），点击「开始分析」；') +
-                    li('② 有碎卡兑换时：上传碎卡记录，点击「开始导入」；') +
-                    li('③ 有集赞兑换时：上传集赞兑换表，点击「开始导入」。'))
-                + stepBox('第二步', '碎卡兑换审核',
-                    li('<b>修改</b>：用户填错或需调整时，点行尾「修改」修正（留痕）；') +
-                    li('<b>放行</b>：确认无误但被卡住的记录，点「放行」；') +
-                    li('<b>导出审核结果 Excel</b>：完整审核明细，发货用；') +
-                    li('<b>导出未匹配用户清单</b>：找不到下单人的需私信核实；') +
-                    li('<b>导出修改记录</b>：客服所有改动留痕，对账用。'))
-                + stepBox('第三步', '集赞兑换核对',
-                    li('<b>明细行「修改」</b>：联系用户确认后修正手机号/卡面/状态（会留痕）；') +
-                    li('<b>导出集赞导入结果 Excel</b>：内部完整版（含全部明细 + 修改记录）；') +
-                    li('<b>导出来豹接龙查询表</b>：发给用户自助查询的表（含集赞修改记录）；') +
-                    li('<b>导出集赞核心信息查询表</b>：精简版。'))
-                + stepBox('第四步', '看记录',
-                    li('<b>页面下方「修改历史」</b>：每次修改/放行的完整时间线；') +
-                    li('<b>所有导出 Excel 的备注/记录 Sheet</b>：事后对账凭证。'));
-            suikaOpenEditModal(suikaModalShell('📖 使用说明', bodyHtml, '', 'suikaCloseEditModal()', 760));
+                '<div style="display:flex;gap:8px;margin-bottom:12px;">' + tabBtn('usageTabNormal', '📘 普通管理员说明', 'normal') + tabBtn('usageTabSuper', '👑 超管专属说明', 'super') + '</div>'
+                + '<div id="usagePanelNormal" style="display:' + (isSuperNow ? 'none' : 'block') + ';">' + normalHtml + '</div>'
+                + '<div id="usagePanelSuper" style="display:' + (isSuperNow ? 'block' : 'none') + ';">' + superHtml + '</div>';
+            suikaOpenEditModal(suikaModalShell('📖 使用说明', bodyHtml, '', 'suikaCloseEditModal()', 800));
         }
         function suikaModalShell(titleHtml, bodyHtml, saveOnclick, closeFn, modalWidth) {
             const closeCode = closeFn || 'suikaCloseEditModal()';
@@ -5928,30 +5947,75 @@ var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
         }
 
         var cloudTopWrapEl = null;
+        var cloudMoreMenuEl = null;
+        var cloudMoreDocClickBound = false;
         function cloudIsSuper() { return cloudGetRole() === 'super'; }
         function cloudRebuildTopBar() {
             const oldWrap = cloudTopWrapEl;
             if (oldWrap && oldWrap.parentNode) oldWrap.parentNode.removeChild(oldWrap);
             const wrap = document.createElement('div');
-            wrap.style.cssText = 'position:fixed;top:12px;right:128px;z-index:9000;display:flex;gap:6px;flex-wrap:wrap;';
+            wrap.style.cssText = 'position:fixed;top:12px;right:128px;z-index:9000;display:flex;gap:6px;';
             cloudTopWrapEl = wrap;
             const mk = function (txt, fn, bg, title) {
                 const b = document.createElement('button');
                 b.textContent = txt;
                 b.title = title || txt;
-                b.style.cssText = 'padding:8px 12px;border:none;border-radius:20px;font-size:13px;font-weight:bold;cursor:pointer;box-shadow:0 4px 10px rgba(0,0,0,0.18);color:#fff;background:' + (bg || '#334155') + ';';
+                b.style.cssText = 'padding:8px 12px;border:none;border-radius:20px;font-size:13px;font-weight:bold;cursor:pointer;box-shadow:0 4px 10px rgba(0,0,0,0.18);color:#fff;background:' + (bg || '#334155') + ';white-space:nowrap;';
                 b.addEventListener('click', fn);
                 return b;
             };
+            // 所有角色共有的核心高频按钮常驻展示
             wrap.appendChild(mk('⬆ 保存到云端', function () { cloudSaveNow(); }, '#065f46', '把碎卡审核/集赞礼兑记录（小表）写入云端；订单大表本地导入不上云'));
             wrap.appendChild(mk('⬇ 拉取记录合并', function () { cloudLoadFromServer(false); }, '#1d4ed8', '拉取云端上一班记录，并入当前页面（只增改不删除）'));
             if (cloudIsSuper()) {
-                wrap.appendChild(mk('以本地覆盖云端', function () { cloudForceSaveNow(); }, '#b45309', '【超管】不合并，直接把本页数据整份覆盖云端（云端旧记录会被替换）'));
-                wrap.appendChild(mk('清空云端审核数据', function () { cloudResetRemoteData(); }, '#b91c1c', '【超管】把云端碎卡/集赞记录清空为 0（账号、日志与本地数据不受影响）'));
-                wrap.appendChild(mk('云端日志', function () { cloudShowCloudLogs(); }, '#6d28d9', '【超管】查看最近 200 条云端保存记录（谁在何时保存）'));
+                // 超管：低频/管理/危险操作收进「更多」下拉，顶栏保持清爽不拥挤
+                const moreBtn = mk('☰ 更多', function (ev) { cloudToggleMoreMenu(ev); }, '#334155', '云数据管理、云端日志、退出登录等更多操作');
+                moreBtn.id = 'cloudMoreBtn';
+                wrap.appendChild(moreBtn);
+                cloudMoreMenuEl = document.createElement('div');
+                cloudMoreMenuEl.id = 'cloudMoreMenu';
+                cloudMoreMenuEl.style.cssText = 'display:none;position:absolute;top:calc(100% + 8px);right:0;z-index:9002;background:#fff;border:1px solid #eef2f6;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,0.22);padding:6px;min-width:240px;';
+                const item = function (txt, color, fn, desc) {
+                    const it = document.createElement('div');
+                    it.style.cssText = 'display:flex;align-items:center;gap:9px;padding:9px 12px;border-radius:8px;cursor:pointer;font-size:13px;color:#1e293b;';
+                    it.title = desc || txt;
+                    it.innerHTML = '<span style="width:8px;height:8px;border-radius:50%;background:' + color + ';flex-shrink:0;"></span><span>' + txt + '</span>';
+                    it.addEventListener('mouseenter', function () { it.style.background = '#f1f5f9'; });
+                    it.addEventListener('mouseleave', function () { it.style.background = 'transparent'; });
+                    it.addEventListener('click', function () { cloudCloseMoreMenu(); fn(); });
+                    return it;
+                };
+                const dv = document.createElement('div');
+                dv.style.cssText = 'height:1px;background:#eef2f6;margin:4px 8px;';
+                cloudMoreMenuEl.appendChild(item('以本地覆盖云端', '#b45309', function () { cloudForceSaveNow(); }, '【超管】不合并，直接把本页数据整份覆盖云端（云端旧记录会被替换）'));
+                cloudMoreMenuEl.appendChild(item('清空云端审核数据', '#b91c1c', function () { cloudResetRemoteData(); }, '【超管】把云端碎卡/集赞记录清空为 0（账号、日志与本地数据不受影响）'));
+                cloudMoreMenuEl.appendChild(item('云端日志', '#6d28d9', function () { cloudShowCloudLogs(); }, '【超管】查看最近 200 条云端保存记录（谁在何时保存）'));
+                cloudMoreMenuEl.appendChild(dv);
+                cloudMoreMenuEl.appendChild(item('退出登录', '#64748b', function () { if (window.confirm('确认退出登录？')) cloudLogout(); }, '清除本机 token 并回到登录页'));
+                wrap.appendChild(cloudMoreMenuEl);
+                if (!cloudMoreDocClickBound) {
+                    cloudMoreDocClickBound = true;
+                    document.addEventListener('click', function (e) {
+                        const m = document.getElementById('cloudMoreMenu');
+                        if (!m || m.style.display !== 'block') return;
+                        const btn = document.getElementById('cloudMoreBtn');
+                        if (btn && btn.contains(e.target)) return;
+                        if (!m.contains(e.target)) m.style.display = 'none';
+                    });
+                }
+            } else {
+                // 普通管理员：核心操作 + 退出，无需折叠
+                wrap.appendChild(mk('退出', function () { if (window.confirm('确认退出登录？')) cloudLogout(); }, '#64748b', '清除本机 token 并回到登录页'));
             }
-            wrap.appendChild(mk('退出', function () { if (window.confirm('确认退出登录？')) cloudLogout(); }, '#64748b', '清除本机 token 并回到登录页'));
             document.body.appendChild(wrap);
+        }
+        function cloudToggleMoreMenu(ev) {
+            if (ev) ev.stopPropagation();
+            if (!cloudMoreMenuEl) return;
+            cloudMoreMenuEl.style.display = (cloudMoreMenuEl.style.display === 'block') ? 'none' : 'block';
+        }
+        function cloudCloseMoreMenu() {
+            if (cloudMoreMenuEl) cloudMoreMenuEl.style.display = 'none';
         }
 
         // 【超管】以本地覆盖云端：跳过“先拉后合并”，把当前页面小表整份写入云端
