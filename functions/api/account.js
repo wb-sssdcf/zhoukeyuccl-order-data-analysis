@@ -94,6 +94,35 @@ export async function onRequestPost(context) {
   } catch (e) {
     return json({ error: "请求格式不对" }, 400);
   }
+  const action = String(body.action || "create").trim().toLowerCase();
+
+  // ---- 改名：把 username 账号改名为 newUsername（保留密码/角色/创建信息） ----
+  if (action === "rename") {
+    const oldName = String(body.username || "").trim().toLowerCase();
+    const newName = String(body.newUsername || "").trim().toLowerCase();
+    if (!oldName || !newName) return json({ error: "请填写原账号名和新账号名" }, 400);
+    if (newName.length > 20) return json({ error: "新账号名不能超过 20 个字符" }, 400);
+    if (newName === oldName) return json({ error: "新旧账号名相同，无需改名" }, 400);
+    if (newName === "ad001") return json({ error: "ad001 为内置超管，不可改名覆盖" }, 400);
+
+    const oldStr = await kv.get("admin:" + oldName);
+    if (!oldStr) return json({ error: "原账号不存在：" + oldName }, 404);
+    const dup = await kv.get("admin:" + newName);
+    if (dup) return json({ error: "新账号名已被占用：" + newName }, 409);
+
+    let rec;
+    try { rec = JSON.parse(oldStr); } catch (e) { return json({ error: "原账号记录损坏" }, 500); }
+    rec.username = newName;
+    rec.renamedAt = nowText();
+    rec.renamedBy = operator;
+    rec.renamedFrom = oldName;
+    await kv.put("admin:" + newName, JSON.stringify(rec));
+    await kv.delete("admin:" + oldName);
+    await appendLog(kv, { user: operator, action: "改名:" + oldName + "→" + newName, size: 0 });
+    return json({ ok: true, username: newName, role: rec.role || "admin" });
+  }
+
+  // ---- 默认：创建账号 ----
   let username = String(body.username || "").trim().toLowerCase();
   const password = String(body.password || "");
   let role = String(body.role || "admin").trim().toLowerCase();
