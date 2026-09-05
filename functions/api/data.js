@@ -62,7 +62,22 @@ export async function onRequestGet(context) {
   if (!user) return json({ error: "没有登录或登录已过期，请重新登录" }, 401);
 
   const raw = await kv.get("gacha_data");
-  return json({ data: raw ? JSON.parse(raw) : null });
+
+  // 顺带返回当前账号角色（前端据此显示超管按钮）
+  let role = "admin";
+  try {
+    const recStr = await kv.get("admin:" + user);
+    if (recStr) {
+      const rec = JSON.parse(recStr);
+      role = rec.role || (user === "ad001" ? "super" : "admin");
+    } else if (user === "ad001") {
+      role = "super";
+    }
+  } catch (eR) {
+    role = user === "ad001" ? "super" : "admin";
+  }
+
+  return json({ data: raw ? JSON.parse(raw) : null, role: role });
 }
 
 // PUT /api/data → 把网页传来的数据存进云端（带冲突检测）

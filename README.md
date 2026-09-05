@@ -1,3 +1,14 @@
+---
+AIGC:
+    Label: "1"
+    ContentProducer: 001191440300708461136T1XGW3
+    ProduceID: e316d7daa359ca6d154f9d5046d69288_26d444f0a8e711f1a393525400f8a581
+    ReservedCode1: V1B6w7tHMmt+ptMqd1eXxoFlsYTomn23PQ99zwaweJYoyYdvYGXeb07TvequMlm7duMdhfctxTypweOig51P/JR1ivMDJxo1YfOUlN98djLxigbs8avXBRVhKI9pu9L82pGR8z0cH6p1vqM6uDUHgdeEsbtB/6Cx8CpN/jvzzI5Ju6LCTJLjau4E8rg=
+    ContentPropagator: 001191440300708461136T1XGW3
+    PropagateID: e316d7daa359ca6d154f9d5046d69288_26d444f0a8e711f1a393525400f8a581
+    ReservedCode2: V1B6w7tHMmt+ptMqd1eXxoFlsYTomn23PQ99zwaweJYoyYdvYGXeb07TvequMlm7duMdhfctxTypweOig51P/JR1ivMDJxo1YfOUlN98djLxigbs8avXBRVhKI9pu9L82pGR8z0cH6p1vqM6uDUHgdeEsbtB/6Cx8CpN/jvzzI5Ju6LCTJLjau4E8rg=
+---
+
 # 抽抽乐数据审核平台（小卡抽抽乐活动数据）
 
 > 多管理员轮班共用 · 订单数据分析 + 碎卡兑换审核 + 宣传礼集赞兑换核对
@@ -71,3 +82,4 @@
 | v2 | 云端只存小表（碎卡+集赞），记录级合并弹窗，主订单大表本地导入不上云 |
 | v3 | 修复"重传文件洗白修改历史"根因：导入不再自动保存云端、保存前先拉云端合并再写回、重导保留本地人工成果 |
 | v4 | UI 交接可视化：右下角悬浮窗（当前登录/数据来源/操作记录可展开收起）、修改历史加昵称列、碎卡表加 ✎已改 列 |
+*（内容由AI生成，仅供参考）*

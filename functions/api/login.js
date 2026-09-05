@@ -62,5 +62,8 @@ export async function onRequestPost(context) {
     { expirationTtl: 7 * 24 * 60 * 60 }
   );
 
-  return json({ token, username });
+  // 5. 角色：账号 KV 里可显式写 role 覆盖；未写时 ad001 为超级管理员(super)，其余为管理员(admin)
+  const role = (record && record.role) || (username === "ad001" ? "super" : "admin");
+
+  return json({ token, username, role });
 }
