@@ -6000,25 +6000,164 @@ var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
             }
         }
 
-        // 【超管】查看云端最近操作日志（谁在何时保存了什么；云端最多保留 200 条）
+        // 【超管】云端日志管理：查看 + 筛选 + 删除单条 + 清空全部（仅 super）
         async function cloudShowCloudLogs() {
             if (!cloudGetToken()) { cloudShowLogin('请先登录'); return; }
             if (!cloudIsSuper()) { cloudToast('仅超级管理员可执行', true); return; }
+            const logs = await cloudLogFetch();
+            if (logs === null) return;
+            cloudLogManagerShow(logs);
+        }
+
+        async function cloudLogFetch() {
             try {
                 const json = await cloudRequest('/api/log', 'GET');
-                const logs = (json && Array.isArray(json.logs)) ? json.logs : [];
-                const lines = logs.length ? logs.map(function (g) { return '[' + (g.t || '-') + '] ' + (g.user || '-') + ' ' + (g.action || '保存') + (g.size ? '（' + g.size + ' B）' : ''); }).reverse() : ['（暂无云端保存日志）'];
-                cloudMergeDialog({ onCreated: function (c) {
-                    c.setTitle('云端操作日志（最近 ' + logs.length + ' 条）');
-                    c.setBody(lines.join('\n'));
-                    c.setButtons([{ label: '知道了', value: 'ok', primary: true }]);
-                } });
+                return (json && Array.isArray(json.logs)) ? json.logs : [];
             } catch (e) {
-                if (e && e.status === 401) { cloudShowLogin('登录已过期，请重新登录'); }
+                if (e && e.status === 401) cloudShowLogin('登录已过期，请重新登录');
                 else cloudToast('云端日志拉取失败：' + (e && e.message ? e.message : '网络异常'), true);
+                return null;
             }
         }
 
+        // ---- 日志管理器 UI（仅超管进入）----
+        var cloudLogManagerState = null; // { logs, user, date, kw }
+        async function cloudLogManagerShow(logs) {
+            const old = document.getElementById('cloudLogOverlay');
+            if (old && old.parentNode) old.parentNode.removeChild(old);
+            const users = [];
+            (logs || []).forEach(function (g) { if (g.user && users.indexOf(g.user) < 0) users.push(g.user); });
+            users.sort();
+
+            const ov = document.createElement('div');
+            ov.id = 'cloudLogOverlay';
+            ov.style.cssText = 'position:fixed;inset:0;z-index:11550;display:flex;align-items:center;justify-content:center;background:rgba(15,30,48,0.74);backdrop-filter:blur(2px);';
+            ov.onclick = function (e) { if (e.target === ov) cloudLogManagerClose(); };
+            const box = document.createElement('div');
+            box.style.cssText = 'background:#fff;border-radius:16px;padding:22px 26px;width:840px;max-width:94vw;box-shadow:0 18px 60px rgba(0,0,0,0.35);font-family:-apple-system,\'Segoe UI\',Roboto,sans-serif;';
+            box.innerHTML =
+                '<div style="font-size:18px;font-weight:bold;color:#20517d;margin-bottom:14px;">云端操作日志（<span id="clCount"></span>）<span style="font-weight:normal;font-size:12px;color:#94a3b8;margin-left:8px;">仅超管可删除/清空；云端最多保留 200 条</span></div>' +
+                '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center;">' +
+                '  <select id="clUser" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;max-width:150px;"></select>' +
+                '  <input id="clDate" placeholder="日期(如 2026-09-05)" style="width:150px;padding:6px 8px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;">' +
+                '  <input id="clKw" placeholder="操作关键字(如 保存/清空)" style="width:170px;padding:6px 8px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;">' +
+                '  <button id="clDoFilter" style="padding:6px 14px;border:0;border-radius:8px;background:#2563eb;color:#fff;font-size:13px;cursor:pointer;">筛选</button>' +
+                '  <button id="clReset" style="padding:6px 14px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#475569;font-size:13px;cursor:pointer;">重置</button>' +
+                '</div>' +
+                '<div id="clList" style="border:1px solid #e2e8f0;border-radius:10px;max-height:48vh;overflow:auto;background:#f8fafc;"></div>' +
+                '<div style="display:flex;gap:10px;justify-content:space-between;align-items:center;margin-top:14px;flex-wrap:wrap;">' +
+                '  <button id="clClear" style="padding:8px 16px;border:0;border-radius:8px;background:#b91c1c;color:#fff;font-size:13px;cursor:pointer;">清空全部日志</button>' +
+                '  <div style="display:flex;gap:10px;">' +
+                '    <button id="clRefresh" style="padding:8px 16px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#475569;font-size:13px;cursor:pointer;">刷新</button>' +
+                '    <button id="clClose" style="padding:8px 20px;border:0;border-radius:8px;background:#2563eb;color:#fff;font-size:13px;cursor:pointer;">关闭</button>' +
+                '  </div>' +
+                '</div>';
+            ov.appendChild(box);
+            document.body.appendChild(ov);
+
+            cloudLogManagerState = { logs: logs || [], user: '', date: '', kw: '' };
+
+            const sel = document.getElementById('clUser');
+            sel.innerHTML = '<option value="">全部账号</option>' + users.map(function (u) { return '<option value="' + u + '">' + u + '</option>'; }).join('');
+
+            document.getElementById('clDoFilter').onclick = function () {
+                cloudLogManagerState.user = sel.value;
+                cloudLogManagerState.date = document.getElementById('clDate').value.trim();
+                cloudLogManagerState.kw = document.getElementById('clKw').value.trim();
+                cloudLogManagerRender();
+            };
+            document.getElementById('clReset').onclick = function () {
+                sel.value = ''; document.getElementById('clDate').value = ''; document.getElementById('clKw').value = '';
+                cloudLogManagerState.user = ''; cloudLogManagerState.date = ''; cloudLogManagerState.kw = '';
+                cloudLogManagerRender();
+            };
+            document.getElementById('clRefresh').onclick = async function () {
+                const fresh = await cloudLogFetch();
+                if (fresh !== null) { cloudLogManagerState.logs = fresh; cloudLogManagerRender(); }
+            };
+            document.getElementById('clClear').onclick = function () { cloudLogManagerClear(); };
+            document.getElementById('clClose').onclick = function () { cloudLogManagerClose(); };
+
+            const listEl = document.getElementById('clList');
+            listEl.onclick = function (e) {
+                const t = e.target;
+                if (!t || !t.classList || !t.classList.contains('cl-del')) return;
+                const idx = parseInt(t.getAttribute('data-idx'), 10);
+                if (isNaN(idx)) return;
+                if (window.confirm('确认删除这条日志记录？\n删除后不可恢复，系统会额外记一条删除痕迹。')) cloudLogManagerDelete(idx);
+            };
+            cloudLogManagerRender();
+        }
+
+        function cloudLogManagerFiltered() {
+            const st = cloudLogManagerState || { logs: [], user: '', date: '', kw: '' };
+            return (st.logs || []).filter(function (g) {
+                if (st.user && g.user !== st.user) return false;
+                if (st.date && String(g.t || '').indexOf(st.date) !== 0) return false;
+                if (st.kw) {
+                    const text = ((g.user || '') + ' ' + (g.action || '')).toLowerCase();
+                    if (text.indexOf(st.kw.toLowerCase()) < 0) return false;
+                }
+                return true;
+            });
+        }
+
+        function cloudLogManagerRender() {
+            if (!document.getElementById('cloudLogOverlay')) return;
+            const st = cloudLogManagerState || { logs: [] };
+            const filtered = cloudLogManagerFiltered();
+            document.getElementById('clCount').textContent = (st.logs || []).length + ' 条' + (filtered.length !== (st.logs || []).length ? '（筛选出 ' + filtered.length + ' 条）' : '');
+            const list = document.getElementById('clList');
+            if (!filtered.length) { list.innerHTML = '<div style="padding:26px;color:#94a3b8;text-align:center;">（没有符合条件的日志）</div>'; return; }
+            const rows = [];
+            for (let i = filtered.length - 1; i >= 0; i--) {
+                const g = filtered[i];
+                const origIdx = (st.logs || []).indexOf(g);
+                rows.push('<div style="display:flex;align-items:center;gap:8px;padding:7px 12px;border-bottom:1px solid #eef2f7;font-size:13px;color:#334155;">' +
+                    '<span style="color:#94a3b8;white-space:nowrap;">[' + (g.t || '-') + ']</span>' +
+                    '<span style="font-weight:bold;white-space:nowrap;min-width:56px;">' + (g.user || '-') + '</span>' +
+                    '<span style="flex:1;word-break:break-all;">' + (g.action || '保存') + (g.size ? '（' + g.size + ' B）' : '') + '</span>' +
+                    '<button class="cl-del" data-idx="' + origIdx + '" style="flex:0 0 auto;padding:2px 10px;border:1px solid #fecaca;border-radius:6px;background:#fff;color:#b91c1c;font-size:12px;cursor:pointer;">删除</button>' +
+                    '</div>');
+            }
+            list.innerHTML = rows.join('');
+        }
+
+        async function cloudLogManagerDelete(idx) {
+            try {
+                await cloudRequest('/api/log?id=' + idx, 'DELETE');
+                cloudToast('已删除该日志记录');
+                const fresh = await cloudLogFetch();
+                if (fresh !== null) { cloudLogManagerState.logs = fresh; cloudLogManagerRender(); }
+            } catch (e) {
+                if (e && e.status === 401) cloudShowLogin('登录已过期，请重新登录');
+                else if (e && e.status === 403) cloudToast('仅超级管理员可删除日志', true);
+                else cloudToast('删除失败：' + (e && e.message ? e.message : '网络异常'), true);
+            }
+        }
+
+        async function cloudLogManagerClear() {
+            const st = cloudLogManagerState || { logs: [] };
+            const n = (st.logs || []).length;
+            if (!n) { cloudToast('当前没有日志可清空', true); return; }
+            if (!window.confirm('确认清空全部云端日志？\n\n· 将删除全部 ' + n + ' 条日志\n· 删除后不可恢复\n· 系统会保留一条“清空全部日志”的审计记录\n\n确认请点“确定”。')) return;
+            try {
+                const ret = await cloudRequest('/api/log?all=1', 'DELETE');
+                cloudToast('已清空全部日志' + (ret && typeof ret.cleared === 'number' ? '（原 ' + ret.cleared + ' 条）' : ''));
+                const fresh = await cloudLogFetch();
+                if (fresh !== null) { cloudLogManagerState.logs = fresh; cloudLogManagerRender(); }
+            } catch (e) {
+                if (e && e.status === 401) cloudShowLogin('登录已过期，请重新登录');
+                else if (e && e.status === 403) cloudToast('仅超级管理员可清空日志', true);
+                else cloudToast('清空失败：' + (e && e.message ? e.message : '网络异常'), true);
+            }
+        }
+
+        function cloudLogManagerClose() {
+            const ov = document.getElementById('cloudLogOverlay');
+            if (ov && ov.parentNode) ov.parentNode.removeChild(ov);
+            cloudLogManagerState = null;
+        }
         // ---------- 初始化：先登录门禁，token 有效则探测云端 ----------
         async function cloudInit() {
             cloudInjectUI();
