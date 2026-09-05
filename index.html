@@ -636,7 +636,7 @@
                 document.getElementById('analysisProgressArea').classList.add('hidden');
                 resultSection.classList.remove('hidden');
                 setTimeout(() => { Object.values(charts).forEach(c => c.resize()); }, 100);
-                queueCloudSave();
+                // 主订单大表本地导入不上云，不触发云端保存（避免误把无小表记录的空状态写回云端）
             } catch (error) {
                 alert('解析文件失败：' + error.message);
                 loadingSection.classList.add('hidden');
@@ -2849,6 +2849,8 @@
                 } else {
                     wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
                 }
+                // 重导前先保留本地已有的人工处理记录，供下方按 code 贴回，避免覆盖洗白
+                const suikaPrevSubmissions = Array.isArray(suikaSubmissions) ? suikaSubmissions.slice() : [];
                 suikaSubmissions = groupSuikaRowsFromWb(wb);
                 userCardCountsMap = buildUserCardCounts(rawOrdersData);
                 setProg(55, '匹配用户并审核...');
@@ -2899,6 +2901,8 @@
                         });
                     });
                 }
+                // 重传/换批次时，把本次导入前本地已人工处理过的记录（修改历史/人工放行）按 code 贴回新行，避免人工成果随覆盖丢失
+                suikaPreserveManual(suikaPrevSubmissions, suikaSubmissions);
                 suikaAuditMap = {};
                 suikaSubmissions.forEach(s => {
                     if (s.user) {
@@ -2914,7 +2918,7 @@
                 const statusCount = { '通过': 0, '未找到用户': 0, '需人工处理': 0 };
                 suikaSubmissions.forEach(s => { statusCount[s.audit.status] = (statusCount[s.audit.status] || 0) + 1; });
                 alert(`碎卡兑换审核完成：共 ${suikaSubmissions.length} 个提交\n通过 ${statusCount['通过']} 个，未找到用户 ${statusCount['未找到用户']} 个\n需人工处理 ${statusCount['需人工处理']} 个`);
-                queueCloudSave();
+                // 不再“导入即自动保存到云端”：重导只更新本地页面并保留人工成果，避免把无历史状态整份回写云端；确认无误后手动点「保存到云端」
             } catch (err) {
                 const rawMsg = (err && err.message) ? err.message : String(err || '未知错误');
                 let alertMsg;
@@ -4649,9 +4653,14 @@
                 } else {
                     wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
                 }
+                const jizanPrevData = (typeof jizanExportData !== 'undefined' && Array.isArray(jizanExportData)) ? jizanExportData.slice() : [];
                 const parsed = parseJizanWorkbook(wb);
                 applyJizan(parsed);
-                queueCloudSave();
+                // 重传/换批次时把本地已有的人工处理结果（人工状态/修改历史/人工指定归属）按 来源Sheet+手机号+订单号+卡面 贴回新行
+                jizanPreserveManual(jizanPrevData, jizanExportData);
+                if (typeof renderJizanDetail === 'function') renderJizanDetail();
+                if (typeof renderJizanSummary === 'function' && typeof buildJizanSummaryFromExport === 'function') renderJizanSummary(buildJizanSummaryFromExport(), true);
+                // 不再“导入即自动保存到云端”：重导只更新本地页面并保留人工成果，避免把无历史状态整份回写云端；确认无误后手动点「保存到云端」
             } catch (err) {
                 alert('集赞兑换表解析失败：' + err.message);
             } finally {
@@ -5356,9 +5365,29 @@
             cloudSavingBusy = true;
             cloudStatusPill('保存中…');
             try {
+                // 保存前先拉取云端：把云端最新记录合并进本地后再整份写回，杜绝“后保存方覆盖先保存方”导致他人处理丢失
+                // 云端读取失败时中止本次保存（不覆盖），提示稍后重试
+                let mergeInfo = '';
+                try {
+                    const remote = await cloudGetData();
+                    if (remote && typeof remote === 'object' && remote.schema) {
+                        const ret = await cloudApplySnapshot(remote);
+                        if (ret && !ret.empty && ret.stats) {
+                            const st = ret.stats;
+                            const n = (st.suikaAdd || 0) + (st.jizanAdd || 0);
+                            const u = (st.suikaUpd || 0) + (st.jizanUpd || 0);
+                            if (n + u > 0) mergeInfo = '（已并入云端他人记录 新增' + n + '/更新' + u + '）';
+                        }
+                    }
+                } catch (eMerge) {
+                    if (eMerge && eMerge.status === 401) throw eMerge;
+                    cloudStatusPill('保存中止：云端读取失败，为避免覆盖他人数据本次不保存', '#ffd6d6');
+                    cloudToast('云端读取失败，本次已取消保存（不会覆盖云端）。请检查网络后重试。', true);
+                    return;
+                }
                 const snap = cloudCollectSnapshot();
                 await cloudPutData(snap);
-                cloudStatusPill('已同步 ' + snap.updatedAt);
+                cloudStatusPill('已同步 ' + snap.updatedAt + mergeInfo);
             } catch (e) {
                 if (e && e.status === 401) {
                     cloudStatusPill('登录过期，请重新登录', '#ffd6d6');
@@ -5479,6 +5508,70 @@
             return { ok: true, empty: false, stats: stats, time: snap.updatedAt || '', by: snap.updatedBy || '' };
         }
 
+        // ---------- 重传基础表时保留本地人工成果（防覆盖洗白） ----------
+        // 碎卡：旧列表与新列表按 code 对齐，把“人工修改/放行”产生的字段贴回新行；自动审核字段不贴（新表按当前口径重审）
+        function suikaPreserveManual(oldList, newBase) {
+            if (!Array.isArray(oldList) || !Array.isArray(newBase)) return;
+            const byCode = {};
+            newBase.forEach(function (ns) { if (ns && String(ns.code || '') !== '') byCode[String(ns.code)] = ns; });
+            const copyField = function (src, dst, key) {
+                if (src && dst && src[key] !== undefined && src[key] !== null) {
+                    try { dst[key] = Array.isArray(src[key]) ? src[key].slice() : src[key]; } catch (e) {}
+                }
+            };
+            oldList.forEach(function (os) {
+                if (!os || os.code === undefined || os.code === null) return;
+                const ns = byCode[String(os.code)];
+                if (!ns) return;
+                // 行级：修改历史 + 人工编辑痕迹（含旧单条字段兜底）
+                ['suikaHistory', 'manuallyEdited', 'editedNote', 'editedAt', 'editedContent'].forEach(function (k) { copyField(os, ns, k); });
+                // 请求级：历史数组 + 人工放行 audit（整份保留放行结果，避免重导后需人工处理项回到放行前）
+                if (Array.isArray(os.requests) && Array.isArray(ns.requests)) {
+                    const n = Math.min(os.requests.length, ns.requests.length);
+                    for (let i = 0; i < n; i++) {
+                        const or = os.requests[i], nr = ns.requests[i];
+                        if (!or || !nr) continue;
+                        copyField(or, nr, 'suikaHistory');
+                        copyField(or, nr, 'manuallyEdited');
+                        copyField(or, nr, 'editedNote');
+                        copyField(or, nr, 'editedAt');
+                        copyField(or, nr, 'editedContent');
+                        if (or.audit && or.audit.manuallyReleased) nr.audit = JSON.parse(JSON.stringify(or.audit));
+                    }
+                    // 请求全部人工放行过的新行，组级状态同步为通过（与批量放行 3891 口径一致）
+                    if (ns.requests.length > 0 && ns.requests.every(function (r) { return r.audit && r.audit.pass && r.audit.manuallyReleased; })) {
+                        ns.audit = { pass: true, status: '通过' };
+                    }
+                }
+            });
+        }
+        // 集赞：按 来源Sheet+手机号+订单号+卡面 对齐，贴回人工状态/修改历史/人工指定归属
+        function jizanPreserveManual(oldList, newBase) {
+            if (!Array.isArray(oldList) || !Array.isArray(newBase)) return;
+            const jk = function (e) { return (e.sheet || '') + '|' + String(e.phone || '').trim() + '|' + String(e.orderNo || '').trim() + '|' + String(e.card || '').trim(); };
+            const byKey = {};
+            newBase.forEach(function (ne) { if (ne) { const k = jk(ne); if (!(k in byKey)) byKey[k] = ne; } });
+            const copyField = function (src, dst, key) {
+                if (src && dst && src[key] !== undefined && src[key] !== null) {
+                    try { dst[key] = Array.isArray(src[key]) ? src[key].slice() : src[key]; } catch (e) {}
+                }
+            };
+            oldList.forEach(function (oe) {
+                if (!oe) return;
+                const ne = byKey[jk(oe)];
+                if (!ne) return;
+                ['jizanHistory', 'manualStatus', 'manuallyEdited', 'editedNote', 'editedAt', 'editedContent'].forEach(function (k) { copyField(oe, ne, k); });
+                // 客服人工指定过归属账号的保留归属，避免重导打回“未匹配/待确认”（仅限显式人工编辑过的行）
+                if (oe.manuallyEdited && oe.wechat) {
+                    ne.wechat = oe.wechat;
+                    ne.matched = true;
+                    if (oe.matchedKey === '客服人工指定') ne.matchedKey = '客服人工指定';
+                    ne.ambiguous = false;
+                    ne.accounts = [];
+                }
+            });
+        }
+
         async function cloudLoadFromServer(silent) {
             if (!cloudGetToken()) { cloudShowLogin('请先登录'); return; }
             cloudStatusPill('拉取中…');
@@ -5486,7 +5579,7 @@
                 const snap = await cloudGetData();
                 if (!snap || typeof snap !== 'object' || !snap.schema) {
                     cloudStatusPill('云端暂无已保存数据');
-                    if (!silent) cloudToast('云端暂无数据。可先上传 Excel 分析，系统会自动保存到云端。');
+                    if (!silent) cloudToast('云端暂无数据。请上传 Excel 分析并在确认无误后点「保存到云端」写入。');
                     return;
                 }
                 const ret = await cloudApplySnapshot(snap);
