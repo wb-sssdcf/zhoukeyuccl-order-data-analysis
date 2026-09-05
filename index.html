@@ -227,13 +227,13 @@
                     <table id="suikaSubmitSummaryTable">
                         <colgroup>
                             <col style="width:70px;"><col style="width:80px;"><col style="width:95px;"><col style="width:60px;">
-                            <col style="width:110px;"><col style="width:160px;"><col style="width:100px;"><col style="width:130px;"><col style="width:130px;">
+                            <col style="width:110px;"><col style="width:160px;"><col style="width:100px;"><col style="width:54px;"><col style="width:130px;"><col style="width:130px;">
                         </colgroup>
                         <thead>
                             <tr>
                                 <th>提交编号</th><th>昵称</th><th>手机号</th><th>请求数</th>
                                 <th>换入汇总</th><th>用于兑换的卡(汇总)</th>
-                                <th>审核结果</th><th>原因汇总</th><th>操作</th>
+                                <th>审核结果</th><th>✎已改</th><th>原因汇总</th><th>操作</th>
                             </tr>
                         </thead>
                         <tbody id="suikaSubmitSummaryBody"></tbody>
@@ -246,13 +246,13 @@
                     <table id="suikaResultTable">
                         <colgroup>
                             <col style="width:70px;"><col style="width:50px;"><col style="width:80px;"><col style="width:95px;"><col style="width:50px;"><col style="width:70px;">
-                            <col style="width:110px;"><col style="width:150px;"><col style="width:100px;"><col style="width:130px;"><col style="width:150px;">
+                            <col style="width:110px;"><col style="width:150px;"><col style="width:100px;"><col style="width:54px;"><col style="width:130px;"><col style="width:150px;">
                         </colgroup>
                         <thead>
                             <tr>
                                 <th>提交编号</th><th>请求</th><th>昵称</th><th>手机号</th><th>总抽数</th>
                                 <th>兑换类型</th><th>换入卡面</th><th>用于兑换的卡</th>
-                                <th>审核结果</th><th>原因明细</th><th>操作</th>
+                                <th>审核结果</th><th>✎已改</th><th>原因明细</th><th>操作</th>
                             </tr>
                         </thead>
                         <tbody id="suikaResultBody"></tbody>
@@ -264,7 +264,7 @@
                     </div>
                     <div class="table-wrapper" style="max-height:320px;">
                         <table id="suikaHistoryTable">
-                            <thead><tr><th>时间</th><th>手机号</th><th>提交编号</th><th>操作类型</th><th>修改内容</th><th>原因</th></tr></thead>
+                            <thead><tr><th>时间</th><th>昵称</th><th>手机号</th><th>提交编号</th><th>操作类型</th><th>修改内容</th><th>原因</th></tr></thead>
                             <tbody id="suikaHistoryBody"></tbody>
                         </table>
                     </div>
@@ -337,7 +337,7 @@
                     </div>
                     <div class="table-wrapper" style="max-height:320px;">
                         <table id="jizanHistoryTable">
-                            <thead><tr><th>时间</th><th>手机号</th><th>来源Sheet</th><th>操作类型</th><th>修改内容</th><th>原因</th></tr></thead>
+                            <thead><tr><th>时间</th><th>昵称</th><th>手机号</th><th>来源Sheet</th><th>操作类型</th><th>修改内容</th><th>原因</th></tr></thead>
                             <tbody id="jizanHistoryBody"></tbody>
                         </table>
                     </div>
@@ -2346,7 +2346,7 @@
             // 集赞修改记录 Sheet（复用集赞修改记录行数据；无集赞数据/无修改记录时写占位行，保证未匹配到 userData 的修改也可见）
             const { headers: jh5, data: jd5 } = buildJizanEditLogSheet();
             const wsJizanLog = XLSX.utils.aoa_to_sheet([jh5, ...jd5]);
-            wsJizanLog['!cols'] = [{ wch: 24 }, { wch: 16 }, { wch: 18 }, { wch: 60 }, { wch: 30 }, { wch: 20 }];
+            wsJizanLog['!cols'] = [{ wch: 24 }, { wch: 20 }, { wch: 16 }, { wch: 18 }, { wch: 60 }, { wch: 30 }, { wch: 20 }];
             XLSX.utils.book_append_sheet(wb, wsJizanLog, '集赞修改记录');
             // 修改与放行记录 Sheet（复用修改记录+人工放行数据；无记录时放一行说明文字）
             if (suikaSubmissions && suikaSubmissions.length > 0) {
@@ -2432,7 +2432,7 @@
                 // 集赞修改记录 Sheet（与「导出来豹接龙查询表」按钮口径一致；无记录时写占位行）
                 const { headers: jh5, data: jd5 } = buildJizanEditLogSheet();
                 const wsJizanLog = XLSX.utils.aoa_to_sheet([jh5, ...jd5]);
-                wsJizanLog['!cols'] = [{ wch: 24 }, { wch: 16 }, { wch: 18 }, { wch: 60 }, { wch: 30 }, { wch: 20 }];
+                wsJizanLog['!cols'] = [{ wch: 24 }, { wch: 20 }, { wch: 16 }, { wch: 18 }, { wch: 60 }, { wch: 30 }, { wch: 20 }];
                 XLSX.utils.book_append_sheet(workbook, wsJizanLog, '集赞修改记录');
                 XLSX.writeFile(workbook, getTimestampFilename('抽抽乐_来豹接龙查询表'));
             }
@@ -3799,6 +3799,31 @@
                     ? '<span style="display:inline-block;background:#fef2f2;color:#ef4444;padding:1px 8px;border-radius:10px;font-size:11px;margin-left:6px;" title="卡面核对未通过：换出卡未抽到或数量不足">✗ 卡面</span>'
                     : '<span style="display:inline-block;background:#f0fdf4;color:#059669;padding:1px 8px;border-radius:10px;font-size:11px;margin-left:6px;" title="卡面核对通过">✓ 卡面</span>';
             };
+            // ✎已改标记：该条被客服修改过/人工放行过/有修改历史即显示，悬停可看最近一次操作
+            const suikaEditedBadge = function (has, tip) {
+                return has ? '<span style="color:#2563eb;font-size:11px;white-space:nowrap;" title="' + escAttr(tip || '') + '">✎已改</span>' : '<span style="color:#d1d5db;">—</span>';
+            };
+            const lastHistTip = function (arr, fallback) {
+                if (arr && arr.length) { const h = arr[arr.length - 1]; return (h.type || '修改') + (h.note ? '：' + h.note : ''); }
+                return fallback || '';
+            };
+            const reqHasEdit = function (r) { return !!((r.suikaHistory && r.suikaHistory.length) || r.manuallyEdited || (r.audit && r.audit.manuallyReleased)); };
+            const reqEditedTip = function (r) {
+                if (r.suikaHistory && r.suikaHistory.length) return lastHistTip(r.suikaHistory);
+                if (r.manuallyEdited) return '客服已修改' + (r.editedNote ? '：' + r.editedNote : '');
+                if (r.audit && r.audit.manuallyReleased) return '人工放行';
+                return '';
+            };
+            const subHasEdit = function (s) {
+                if ((s.suikaHistory && s.suikaHistory.length) || s.manuallyEdited) return true;
+                return (s.requests || []).some(reqHasEdit);
+            };
+            const subEditedTip = function (s) {
+                if (s.suikaHistory && s.suikaHistory.length) return lastHistTip(s.suikaHistory);
+                if (s.manuallyEdited) return '客服已修改' + (s.editedNote ? '：' + s.editedNote : '');
+                const r = (s.requests || []).filter(reqHasEdit)[0];
+                return r ? reqEditedTip(r) : '';
+            };
             const inStrOf = r => r.audit.inCard ? (r.audit.inCard + (r.audit.inQty > 1 ? 'x' + r.audit.inQty : '')) : (r.inCard || '（空）');
             const outStrOf = r => suikaOutCardsText(r.outCards);
             const reasonStrOf = (s, ri) => {
@@ -3828,6 +3853,7 @@
                     <td style="max-width:200px;font-size:12px;">${inStr || '-'}</td>
                     <td style="max-width:260px;font-size:12px;">${outStr || '-'}</td>
                     <td>${badgeHtml(status, meta)}${cardBadgeOf(allReasons)}</td>
+                    <td style="text-align:center;">${suikaEditedBadge(subHasEdit(s), subEditedTip(s))}</td>
                     <td style="max-width:320px;font-size:12px;color:${meta.color};">${reasonStr}</td>
                     <td style="white-space:nowrap;">
                         <button type="button" class="suikaEditSubBtn suika-op-btn" data-code="${escHtml(s.code)}" style="border:1px solid #6b7280;background:#f9fafb;color:#374151;" title="修改该提交的昵称/姓名/手机号/订单号后重新匹配审核">修改</button>
@@ -3861,6 +3887,7 @@
                     <td>${inStrOf(r) || '-'}</td>
                     <td style="max-width:260px;font-size:12px;">${outStrOf(r) || '-'}</td>
                     <td>${badgeHtml(st, meta)}${cardBadgeOf(r.audit.reasons || [])}</td>
+                    <td style="text-align:center;">${suikaEditedBadge(reqHasEdit(r), reqEditedTip(r))}</td>
                     <td style="max-width:320px;font-size:12px;color:${meta.color};">${reasonStr}</td>
                     <td style="white-space:nowrap;">${actionHtml}</td>
                 </tr>`;
@@ -4359,10 +4386,10 @@
             if (!tb) return;
             const rows = [];
             (suikaSubmissions || []).forEach(s => {
-                suikaHistRows(s).forEach(h => rows.push({ sort: h.at || '', cells: [h.at || '-', s.phone || '-', s.code || '', h.type || '修改', h.content || '-', h.note || '-'] }));
-                (s.requests || []).forEach(r => suikaHistRows(r).forEach(h => rows.push({ sort: h.at || '', cells: [h.at || '-', s.phone || '-', s.code || '', h.type || '修改', h.content || '-', h.note || '-'] })));
+                suikaHistRows(s).forEach(h => rows.push({ sort: h.at || '', cells: [h.at || '-', s.nickname || '-', s.phone || '-', s.code || '', h.type || '修改', h.content || '-', h.note || '-'] }));
+                (s.requests || []).forEach(r => suikaHistRows(r).forEach(h => rows.push({ sort: h.at || '', cells: [h.at || '-', s.nickname || '-', s.phone || '-', s.code || '', h.type || '修改', h.content || '-', h.note || '-'] })));
             });
-            if (rows.length === 0) { tb.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;padding:14px;">暂无修改/放行记录</td></tr>'; return; }
+            if (rows.length === 0) { tb.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;padding:14px;">暂无修改/放行记录</td></tr>'; return; }
             rows.sort((a, b) => String(a.sort).localeCompare(String(b.sort)));
             tb.innerHTML = rows.map(r => '<tr>' + r.cells.map(c => '<td>' + escHtml(c) + '</td>').join('') + '</tr>').join('');
         }
@@ -4371,8 +4398,8 @@
             const tb = document.getElementById('jizanHistoryBody');
             if (!tb) return;
             const rows = [];
-            (jizanExportData || []).forEach(e => jizanHistRows(e).forEach(h => rows.push({ sort: h.at || '', cells: [h.at || '-', e.phone || '-', jizanSheetNameOf(e.sheet), h.type || '修改', h.content || '-', h.note || '-'] })));
-            if (rows.length === 0) { tb.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;padding:14px;">暂无修改记录</td></tr>'; return; }
+            (jizanExportData || []).forEach(e => jizanHistRows(e).forEach(h => rows.push({ sort: h.at || '', cells: [h.at || '-', e.wechat || '-', e.phone || '-', jizanSheetNameOf(e.sheet), h.type || '修改', h.content || '-', h.note || '-'] })));
+            if (rows.length === 0) { tb.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;padding:14px;">暂无修改记录</td></tr>'; return; }
             rows.sort((a, b) => String(a.sort).localeCompare(String(b.sort)));
             tb.innerHTML = rows.map(r => '<tr>' + r.cells.map(c => '<td>' + escHtml(c) + '</td>').join('') + '</tr>').join('');
         }
@@ -4995,14 +5022,14 @@
         // 共享数据：生成"集赞修改记录"Sheet 的行数据（集赞导入结果 / 来豹接龙查询表导出共用）
         // 兼容说明：即使集赞记录未匹配到 userData（matched=false / wechat 为空），只要 jizanExportData 存在即展示该行修改
         function buildJizanEditLogSheet() {
-            const headers = ['来源Sheet', '手机号', '订单号', '修改内容', '修改原因', '修改时间'];
+            const headers = ['来源Sheet', '昵称', '手机号', '订单号', '修改内容', '修改原因', '修改时间'];
             const data = [];
             (jizanExportData || []).forEach(e => {
                 jizanHistRows(e).forEach(h => {
-                    data.push([jizanSheetNameOf(e.sheet), e.phone || '', e.orderNo || '', h.content || '-', h.note || '-', h.at || '-']);
+                    data.push([jizanSheetNameOf(e.sheet), e.wechat || '', e.phone || '', e.orderNo || '', h.content || '-', h.note || '-', h.at || '-']);
                 });
             });
-            if (data.length === 0) data.push(['（暂无集赞修改记录）', '', '', '', '', '']);
+            if (data.length === 0) data.push(['（暂无集赞修改记录）', '', '', '', '', '', '']);
             return { headers, data };
         }
         function exportJizanResult() {
@@ -5047,7 +5074,7 @@
             // 集赞修改记录：所有被客服修改过的集赞记录，每行一次修改（时间正序）——复用独立构造函数
             const { headers: h5, data: d5 } = buildJizanEditLogSheet();
             const ws5 = XLSX.utils.aoa_to_sheet([h5, ...d5]);
-            ws5['!cols'] = [{ wch: 24 }, { wch: 16 }, { wch: 18 }, { wch: 60 }, { wch: 30 }, { wch: 20 }];
+            ws5['!cols'] = [{ wch: 24 }, { wch: 20 }, { wch: 16 }, { wch: 18 }, { wch: 60 }, { wch: 30 }, { wch: 20 }];
             XLSX.utils.book_append_sheet(wb, ws5, '集赞修改记录');
             XLSX.writeFile(wb, getTimestampFilename('集赞导入结果'));
         }
@@ -5382,18 +5409,23 @@
                 } catch (eMerge) {
                     if (eMerge && eMerge.status === 401) throw eMerge;
                     cloudStatusPill('保存中止：云端读取失败，为避免覆盖他人数据本次不保存', '#ffd6d6');
+                    cloudLogPush('保存中止：云端读取失败，为避免覆盖他人数据本次不保存', 'err');
                     cloudToast('云端读取失败，本次已取消保存（不会覆盖云端）。请检查网络后重试。', true);
                     return;
                 }
                 const snap = cloudCollectSnapshot();
                 await cloudPutData(snap);
                 cloudStatusPill('已同步 ' + snap.updatedAt + mergeInfo);
+                cloudSetSource(cloudGetUser(), snap.updatedAt);
+                cloudLogPush('已保存到云端（更新于 ' + snap.updatedAt + mergeInfo + '）', 'ok');
             } catch (e) {
                 if (e && e.status === 401) {
                     cloudStatusPill('登录过期，请重新登录', '#ffd6d6');
+                    cloudLogPush('云端保存失败：登录已过期，请重新登录', 'err');
                     cloudShowLogin('登录已过期，请重新登录后继续同步');
                 } else {
                     cloudStatusPill('保存失败（网络/服务异常）', '#ffd6d6');
+                    cloudLogPush('云端保存失败（网络/服务异常），本地数据未丢失', 'err');
                     cloudToast('云端保存失败：' + (e && e.message ? e.message : '网络异常') + '。本地数据仍在，可稍后点「保存到云端」重试。', true);
                 }
             } finally {
@@ -5579,16 +5611,19 @@
                 const snap = await cloudGetData();
                 if (!snap || typeof snap !== 'object' || !snap.schema) {
                     cloudStatusPill('云端暂无已保存数据');
+                    cloudLogPush('云端暂无已保存数据');
                     if (!silent) cloudToast('云端暂无数据。请上传 Excel 分析并在确认无误后点「保存到云端」写入。');
                     return;
                 }
                 const ret = await cloudApplySnapshot(snap);
-                if (ret.empty) { cloudStatusPill('云端暂无已保存数据'); return; }
+                if (ret.empty) { cloudStatusPill('云端暂无已保存数据'); cloudLogPush('云端暂无已保存数据'); return; }
                 const st = ret.stats || {};
                 const totalNew = (st.suikaAdd || 0) + (st.jizanAdd || 0);
                 const totalUpd = (st.suikaUpd || 0) + (st.jizanUpd || 0);
                 const totalCf = (st.suikaConflict || 0) + (st.jizanConflict || 0);
                 cloudStatusPill('已合并云端记录（更新于 ' + (ret.time || '-') + '）');
+                cloudSetSource(ret.by || '', ret.time || '');
+                cloudLogPush('拉取合并云端记录：来源账号 ' + (ret.by || '-') + '（更新于 ' + (ret.time || '-') + '），新增 ' + totalNew + '/更新 ' + totalUpd + ' 条', 'ok');
                 if (!silent) {
                     alert('云端记录已合并到当前页面（更新于 ' + (ret.time || '-') + '，账号 ' + (ret.by || '-') + '）：\n' +
                         '· 碎卡审核：新增 ' + (st.suikaAdd || 0) + ' 条、更新 ' + (st.suikaUpd || 0) + ' 条\n' +
@@ -5599,8 +5634,9 @@
                     cloudToast('云端记录已合并：新增 ' + totalNew + ' 条、更新 ' + totalUpd + ' 条');
                 }
             } catch (e) {
-                if (e && e.status === 401) { cloudStatusPill('登录过期，请重新登录', '#ffd6d6'); cloudShowLogin('登录已过期，请重新登录'); return; }
+                if (e && e.status === 401) { cloudStatusPill('登录过期，请重新登录', '#ffd6d6'); cloudLogPush('云端拉取失败：登录已过期', 'err'); cloudShowLogin('登录已过期，请重新登录'); return; }
                 cloudStatusPill('拉取失败（网络/服务异常）', '#ffd6d6');
+                cloudLogPush('云端拉取失败（网络/服务异常）', 'err');
                 if (!silent) cloudToast('云端数据拉取失败：' + (e && e.message ? e.message : '网络异常'), true);
             }
         }
@@ -5735,18 +5771,19 @@
                 const snap = await cloudGetData();
                 if (!snap || typeof snap !== 'object' || !snap.schema) {
                     cloudStatusPill('云端暂无已保存数据');
+                    cloudLogPush('云端暂无已保存数据');
                     return;
                 }
                 const suikaCount = snap.suika && Array.isArray(snap.suika.submissions) ? snap.suika.submissions.length : 0;
                 const jizanCount = snap.jizan && Array.isArray(snap.jizan.exportData) ? snap.jizan.exportData.length : 0;
-                if (!suikaCount && !jizanCount) { cloudStatusPill('云端暂无记录数据'); return; }
+                if (!suikaCount && !jizanCount) { cloudStatusPill('云端暂无记录数据'); cloudLogPush('云端暂无记录数据'); return; }
                 // 阶段1：概要询问（可跳过）
                 const want = await cloudMergeDialog({ onCreated: function (c) {
                     c.setTitle('云端发现上一班记录，是否合并？');
                     c.setBody('来源账号：' + (snap.updatedBy || '-') + '\n保存时间：' + (snap.updatedAt || '-' ) + '\n云端记录：碎卡审核 ' + suikaCount + ' 条、集赞礼兑 ' + jizanCount + ' 条\n\n合并规则：只增改、不删除本地记录；同一条记录两端都改过时，保留修改时间较晚的一方。\n\n可跳过：本地已有较新数据或想稍后再合并，可点「暂不合并」，之后在右上角手动拉取。');
                     c.setButtons([{ label: '暂不合并', value: 'skip' }, { label: '开始合并', value: 'go', primary: true }]);
                 } });
-                if (want !== 'go') { cloudStatusPill('已跳过云端记录合并（可点右上角手动拉取）'); return; }
+                if (want !== 'go') { cloudStatusPill('已跳过云端记录合并（可点右上角手动拉取）'); cloudLogPush('已跳过云端记录合并（可稍后手动拉取）'); return; }
                 // 阶段2：合并中（分阶段文字进度）
                 cloudMergeDialog({ onCreated: function (c) {
                     c.setTitle('正在合并云端记录…');
@@ -5763,11 +5800,12 @@
                                 (((st.suikaConflict || 0) + (st.jizanConflict || 0)) ? '两端都改过、已按较新者保留 ' + ((st.suikaConflict || 0) + (st.jizanConflict || 0)) + ' 条\n' : '') +
                                 '\n' + (sum > 0 ? '本地记录只增改、未删除任何数据。\n本班可继续导入新数据或直接导出。' : '本地记录已是最新，无需变化。'));
                             c.setButtons([{ label: '知道了', value: 'ok', primary: true }]);
-                            if (sum === 0) cloudStatusPill('云端记录与本地一致');
-                            else cloudStatusPill('已合并云端记录（更新于 ' + (ret.time || '-') + '）');
+                            if (sum === 0) { cloudStatusPill('云端记录与本地一致'); cloudLogPush('云端记录与本地一致，无需合并', 'ok'); }
+                            else { cloudStatusPill('已合并云端记录（更新于 ' + (ret.time || '-') + '）'); cloudSetSource(ret.by || snap.updatedBy || '', ret.time || snap.updatedAt || ''); cloudLogPush('已合并云端记录：来源账号 ' + (ret.by || snap.updatedBy || '-') + '（更新于 ' + (ret.time || '-') + '）', 'ok'); }
                         } catch (err) {
                             c.setTitle('合并失败');
                             c.setBody('合并过程中发生错误：' + (err && err.message ? err.message : '未知错误') + '\n本地数据未受影响。');
+                            cloudLogPush('云端合并失败：' + (err && err.message ? err.message : '未知错误'), 'err');
                             c.setButtons([{ label: '知道了', value: 'ok', primary: true }]);
                         }
                     }, 40);
@@ -5778,34 +5816,98 @@
             }
         }
 
-        // ---------- 顶栏/状态 UI ----------
+        // ---------- 右下角悬浮窗（当前登录 / 数据来源 + 操作记录，可展开收起） ----------
         var cloudCloudStatusEl = null;
         var cloudPillUserEl = null;
         var cloudPillStatusEl = null;
+        var cloudPillSourceEl = null;
+        var cloudPillToggleEl = null;
+        var cloudLogWrapEl = null;
+        var cloudLogListEl = null;
+        var cloudLogs = [];
+        var cloudLogMax = 80;
+        var cloudFloatExpanded = true;
+        var cloudLastSource = null;
 
+        var cloudLastBadgeUser = null;
         function cloudRefreshUserBadge() {
-            if (cloudPillUserEl) cloudPillUserEl.textContent = cloudGetUser() ? ('👤 ' + cloudGetUser()) : '未登录';
+            if (cloudPillUserEl) cloudPillUserEl.textContent = '当前登录 ' + (cloudGetUser() ? cloudGetUser() : '未登录');
+            const u = cloudGetUser();
+            if (cloudLastBadgeUser !== u) { cloudLastBadgeUser = u; cloudLogPush(u ? '当前账号：' + u : '未登录'); }
+        }
+        // 记录一条操作日志（悬浮窗内展示；仅本页会话内有效，刷新即清空）
+        function cloudLogPush(text, kind) {
+            if (!text) return;
+            cloudLogs.push({ t: cloudNowText(), text: String(text), kind: kind || 'info' });
+            if (cloudLogs.length > cloudLogMax) cloudLogs.splice(0, cloudLogs.length - cloudLogMax);
+            if (cloudLogListEl) {
+                const d = document.createElement('div');
+                d.style.cssText = 'display:flex;gap:6px;align-items:flex-start;line-height:1.5;padding:1px 0;';
+                const ts = document.createElement('span');
+                ts.textContent = cloudLogs[cloudLogs.length - 1].t.slice(11);
+                ts.style.cssText = 'color:#64748b;flex:none;font-size:11px;';
+                const tx = document.createElement('span');
+                tx.textContent = text;
+                tx.style.cssText = 'flex:1;font-size:12px;color:' + ((kind === 'err') ? '#ffb4b4' : (kind === 'ok' ? '#a7f3d0' : '#cbd5e1')) + ';word-break:break-all;';
+                d.appendChild(ts); d.appendChild(tx);
+                cloudLogListEl.appendChild(d);
+                cloudLogListEl.scrollTop = cloudLogListEl.scrollHeight;
+            }
+        }
+        // 记录当前云端数据来源账号（最近保存者的账号）
+        function cloudSetSource(by, at) {
+            cloudLastSource = (by || at) ? { by: by || '', at: at || '' } : null;
+            if (cloudPillSourceEl) cloudPillSourceEl.textContent = ' 数据来源：' + ((by && by !== '-') ? by : '-') + ((at && at !== '-' && at) ? ' · ' + at : '');
+        }
+        function cloudRenderFloatToggle() {
+            if (!cloudPillToggleEl || !cloudLogWrapEl) return;
+            cloudLogWrapEl.style.display = cloudFloatExpanded ? 'block' : 'none';
+            cloudPillToggleEl.textContent = cloudFloatExpanded ? '收起 ▲' : '展开 ▼';
+        }
+        function cloudToggleFloat() {
+            cloudFloatExpanded = !cloudFloatExpanded;
+            cloudRenderFloatToggle();
         }
         function cloudStatusPill(text, warn) {
             if (cloudPillStatusEl) {
                 cloudPillStatusEl.textContent = '｜' + (text || '');
-                cloudPillStatusEl.style.color = warn ? '#ffd6d6' : '#d9f7e6';
+                cloudPillStatusEl.style.color = warn ? '#ffd6d6' : '#a7f3d0';
                 return;
             }
             if (cloudCloudStatusEl) cloudCloudStatusEl.textContent = text || '';
         }
         function cloudInjectUI() {
-            // 底部状态胶囊（账号｜同步状态）
+            // 右下角悬浮窗：头部=当前登录｜数据来源｜同步状态（点击展开/收起），下方为本页操作记录
             const pill = document.createElement('div');
-            pill.style.cssText = 'position:fixed;right:14px;bottom:12px;z-index:9001;background:#1e293b;color:#fff;font-size:12px;padding:7px 14px;border-radius:20px;box-shadow:0 4px 14px rgba(0,0,0,0.25);display:flex;align-items:center;gap:6px;max-width:64vw;cursor:default;';
+            pill.style.cssText = 'position:fixed;right:14px;bottom:12px;z-index:9001;background:#1e293b;color:#fff;font-size:12px;border-radius:14px;box-shadow:0 6px 18px rgba(0,0,0,0.28);max-width:min(440px, 86vw);min-width:270px;';
+            const head = document.createElement('div');
+            head.style.cssText = 'display:flex;align-items:center;gap:6px;padding:8px 12px;cursor:pointer;user-select:none;flex-wrap:wrap;';
+            head.title = '点击展开/收起操作记录';
             cloudPillUserEl = document.createElement('span');
+            cloudPillUserEl.style.cssText = 'font-weight:bold;color:#fff;white-space:nowrap;';
+            cloudPillSourceEl = document.createElement('span');
+            cloudPillSourceEl.style.cssText = 'color:#94a3b8;white-space:nowrap;';
             cloudPillStatusEl = document.createElement('span');
-            cloudPillStatusEl.style.color = '#d9f7e6';
-            pill.appendChild(cloudPillUserEl);
-            pill.appendChild(cloudPillStatusEl);
+            cloudPillStatusEl.style.color = '#a7f3d0';
+            cloudPillToggleEl = document.createElement('span');
+            cloudPillToggleEl.style.cssText = 'color:#94a3b8;font-size:11px;margin-left:auto;white-space:nowrap;';
+            head.appendChild(cloudPillUserEl);
+            head.appendChild(cloudPillSourceEl);
+            head.appendChild(cloudPillStatusEl);
+            head.appendChild(cloudPillToggleEl);
+            head.addEventListener('click', cloudToggleFloat);
+            pill.appendChild(head);
+            cloudLogWrapEl = document.createElement('div');
+            cloudLogWrapEl.style.cssText = 'display:block;border-top:1px solid rgba(255,255,255,0.12);padding:2px 12px 10px;';
+            cloudLogListEl = document.createElement('div');
+            cloudLogListEl.style.cssText = 'max-height:180px;overflow-y:auto;font-size:12px;';
+            cloudLogWrapEl.appendChild(cloudLogListEl);
+            pill.appendChild(cloudLogWrapEl);
             document.body.appendChild(pill);
             cloudCloudStatusEl = pill;
+            cloudSetSource('', '');
             cloudRefreshUserBadge();
+            cloudRenderFloatToggle();
 
             // 顶栏右侧操作按钮组
             const wrap = document.createElement('div');
@@ -5847,22 +5949,28 @@
                             const ret = await cloudApplySnapshot(snap);
                             if (!ret.empty) {
                                 cloudStatusPill('已载入云端数据（更新于 ' + (ret.time || '-') + '）');
+                                cloudSetSource(ret.by || snap.updatedBy || '', ret.time || snap.updatedAt || '');
+                                cloudLogPush('已载入云端数据：来源账号 ' + (ret.by || snap.updatedBy || '-') + '（更新于 ' + (ret.time || '-') + '）', 'ok');
                                 alert('云端数据已载入：主订单、碎卡审核、集赞导入均已恢复，可直接查看与导出。');
                             }
                         } else {
                             cloudStatusPill('云端有数据，未自动载入');
+                            cloudLogPush('检测到云端有数据（更新于 ' + (snap.updatedAt || '-') + '），未自动载入');
                         }
                     }
                 } else {
                     cloudStatusPill('云端暂无已保存数据');
+                    cloudLogPush('云端暂无已保存数据');
                 }
             } catch (e) {
                 if (e && e.status === 401) {
                     cloudClearAuth();
                     cloudRefreshUserBadge();
+                    cloudLogPush('云端校验失败：登录已过期', 'err');
                     cloudShowLogin('登录已过期，请重新登录');
                 } else {
                     cloudStatusPill('云端不可用（网络异常），可本地使用', '#ffd6d6');
+                    cloudLogPush('云端不可用（网络异常），可本地使用', 'err');
                 }
             }
         }
