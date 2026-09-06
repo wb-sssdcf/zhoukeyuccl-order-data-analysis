@@ -5284,6 +5284,11 @@ var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
         }
 
         async function cloudRequest(path, method, bodyObj) {
+            if (cloudIsDemo && cloudIsDemo()) {
+                const err = new Error('演示模式不访问云端（演示数据为本地随机生成）');
+                err.status = 0;
+                throw err;
+            }
             const token = cloudGetToken();
             const headers = { 'Content-Type': 'application/json' };
             if (token) headers['Authorization'] = 'Bearer ' + token;
@@ -5711,7 +5716,10 @@ var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
                 '<label for="cloudLoginRemember" style="cursor:pointer;">记住我（下次打开自动登录）</label>' +
                 '</div>' +
                 '<button id="cloudLoginBtn" style="width:100%;padding:11px 0;border:none;border-radius:10px;background:linear-gradient(135deg,#20517d,#3b82f6);color:#fff;font-size:15px;font-weight:bold;cursor:pointer;">登 录</button>' +
-                '<div style="font-size:11px;color:#aaa;margin-top:12px;text-align:center;">未勾选「记住我」时，关闭浏览器后需重新登录</div>' +
+                '<div style="display:flex;align-items:center;gap:8px;margin:14px 0 2px;"><div style="flex:1;height:1px;background:#e5e7eb;"></div><span style="font-size:12px;color:#9aa5b1;">或</span><div style="flex:1;height:1px;background:#e5e7eb;"></div></div>' +
+                '<button id="cloudDemoBtn" title="无需登录，使用程序化生成的随机演示数据浏览完整功能（不访问云端）" style="width:100%;padding:11px 0;border:1px solid #99f6e4;border-radius:10px;background:linear-gradient(135deg,#0f766e,#14b8a6);color:#fff;font-size:15px;font-weight:bold;cursor:pointer;">✨ 体验演示模式（无需登录）</button>' +
+                '<div style="font-size:11px;color:#94a3b8;margin-top:10px;text-align:center;line-height:1.7;">演示模式使用程序化生成的随机示例数据，仅作功能展示，<br>不涉及真实用户信息，也不会访问云端。</div>' +
+                '<div style="font-size:11px;color:#aaa;margin-top:8px;text-align:center;">未勾选「记住我」时，关闭浏览器后需重新登录</div>' +
                 '</div>';
             document.body.appendChild(ov);
             cloudLoginOverlay = ov;
@@ -5744,6 +5752,18 @@ var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
                 }
             }
             btn.addEventListener('click', doLogin);
+            const demoBtn = document.getElementById('cloudDemoBtn');
+            if (demoBtn) {
+                demoBtn.addEventListener('click', async function () {
+                    cloudHideLogin();
+                    try {
+                        await cloudEnterDemo();
+                    } catch (err) {
+                        console.error('演示模式加载失败', err);
+                        cloudShowLogin('演示模式加载失败：' + ((err && err.message) ? err.message : '未知错误'));
+                    }
+                });
+            }
             pass.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') doLogin(); });
             document.body.style.overflow = 'hidden';
             setTimeout(() => { try { pass.focus(); } catch (e) {} }, 100);
@@ -5967,6 +5987,15 @@ var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
                 b.addEventListener('click', fn);
                 return b;
             };
+            if (cloudIsDemo && cloudIsDemo()) {
+                // 演示模式：顶栏只保留演示相关按钮，不渲染任何云端操作
+                const exitBtn = mk('⬅ 退出演示', function () { cloudExitDemo(); }, '#0f766e', '清除本次演示数据并回到登录页');
+                exitBtn.id = 'cloudExitDemoBtn';
+                wrap.appendChild(exitBtn);
+                wrap.appendChild(mk('🔄 换一组数据', function () { cloudDemoRegen(); }, '#334155', '重新生成一组随机演示数据（刷新页面）'));
+                document.body.appendChild(wrap);
+                return;
+            }
             // 所有角色共有的核心高频按钮常驻展示
             wrap.appendChild(mk('⬆ 保存到云端', function () { cloudSaveNow(); }, '#065f46', '把碎卡审核/集赞礼兑记录（小表）写入云端；订单大表本地导入不上云'));
             wrap.appendChild(mk('⬇ 拉取记录合并', function () { cloudLoadFromServer(false); }, '#1d4ed8', '拉取云端上一班记录，并入当前页面（只增改不删除）'));
@@ -6225,9 +6254,222 @@ var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
             if (ov && ov.parentNode) ov.parentNode.removeChild(ov);
             cloudLogManagerState = null;
         }
+        // ==================== 演示模式（Demo Mode）====================
+        // 演示模式仅用于功能展示：由本模块在浏览器本地随机生成一批结构合规的示例订单，
+        // 复用主渲染链（processData / renderCharts 等）展示完整页面效果。
+        // 全程不发起任何云端请求，与真实云端数据物理隔离；进入后云端写按钮一律不渲染。
+        var cloudDemoMode = false;
+        var cloudDemoBannerEl = null;
+        function cloudIsDemo() { return !!cloudDemoMode; }
+
+        function cloudDemoFmt(dt) {
+            const p2 = function (n) { return (n < 10 ? '0' : '') + n; };
+            return dt.getFullYear() + '-' + p2(dt.getMonth() + 1) + '-' + p2(dt.getDate()) + ' ' + p2(dt.getHours()) + ':' + p2(dt.getMinutes()) + ':' + p2(dt.getSeconds());
+        }
+
+        // 在不同活动时段附近取演示支付时间，制造覆盖各活动区间（1小时/6小时/24小时/浪漫/周末/终极）的分布
+        function cloudDemoTime(rnd, slot) {
+            const A = new Date('2026-07-11T17:20:00');
+            const slotStarts = [
+                new Date('2026-07-11T17:20:00'),               // 0：开售 0-1 小时
+                new Date('2026-07-11T18:26:00'),               // 1：开售 1-6 小时
+                new Date('2026-07-11T23:26:00'),               // 2：开售 6-24 小时
+                new Date('2026-07-13T12:00:00'),               // 3：浪漫活动期
+                new Date('2026-07-18T12:00:00'),               // 4：周末活动期
+                new Date('2026-07-25T12:00:00'),               // 5：终极活动期
+                new Date('2026-08-01T00:00:00')                // 6：活动后零星时段
+            ];
+            const spansMs = [60, 66, 355, 18, 20, 20, 12];
+            const spanH = spansMs[slot] * 60 * 60 * 1000;
+            if (slot >= 6) return new Date(slotStarts[6].getTime() + Math.floor(rnd() * 12 * 24 * 60 * 60 * 1000));
+            if (slot <= 2) {
+                // 开售 24h 内分布（严格 0-1h / 1-6h / 6-24h）
+                const ms = spansMs[slot] * 60 * 1000;
+                return new Date(slotStarts[slot].getTime() + Math.floor(rnd() * ms));
+            }
+            return new Date(slotStarts[slot].getTime() + Math.floor(rnd() * spanH));
+        }
+
+        // 随机卡面编号（贴近真实命名形态：SSSR/SSR/SR/R/N + 序号）
+        function cloudDemoCardId(rnd) {
+            const r = rnd();
+            let type = 'N', maxNum = 20;
+            if (r < 0.03) { type = 'SSSR'; maxNum = 8; }
+            else if (r < 0.28) { type = 'SSR'; maxNum = 30; }
+            else if (r < 0.78) { type = 'SR'; maxNum = 52; }
+            else if (r < 0.96) { type = 'R'; maxNum = 60; }
+            return type + (1 + Math.floor(rnd() * maxNum));
+        }
+
+        // 演示卡片商品名模板（须含 '周柯宇' 与卡面编号，processData 才判定为有效卡片订单）
+        function cloudDemoCardItem(rnd, id, qty) {
+            return '周柯宇爱意正值炽夏小卡抽抽乐-' + (id || cloudDemoCardId(rnd)) + '[购买数量:' + qty + ']';
+        }
+
+        // 生成一批演示主订单行（纯本地随机，无任何真实用户信息）
+        function cloudGenDemoOrders() {
+            const rnd = (function () {
+                let s = 20260711;
+                return function () { s = (s * 1103515245 + 12345) % 2147483648; return s / 2147483648; };
+            })();
+            const phones = new Set();
+            const nickSeed = 'abcdefghjkmnpqrstuvwxyz23456789';
+            const users = [];
+            const nUsers = 96;
+            for (let i = 0; i < nUsers; i++) {
+                let phone;
+                do { phone = '13' + String(900000000 + Math.floor(rnd() * 99999999)); } while (phones.has(phone));
+                phones.add(phone);
+                let nick = '';
+                for (let k = 0; k < 5; k++) nick += nickSeed.charAt(Math.floor(rnd() * nickSeed.length));
+                // 每用户第一单所处时段：优先活动窗口，少量开售早期制造“早期奖励/限时活动”展示位
+                const slot = [3, 3, 4, 4, 5, 5, 2, 1, 0, 0, 3, 4, 5][Math.floor(rnd() * 13)];
+                const nOrders = 1 + Math.floor(rnd() * 4);
+                users.push({ index: i + 1, phone: phone, wechat: 'zy_' + nick, name: '演示用户' + (i + 1), slot: slot, nOrders: nOrders, first: true });
+            }
+            const rows = [];
+            let orderSeq = 0;
+            users.forEach(function (u) {
+                for (let o = 0; o < u.nOrders; o++) {
+                    // 同一用户的所有订单落在同一活动时段附近（非首单加少量分钟级偏移，模拟连续追加购买）
+                    let dt = cloudDemoTime(rnd, u.slot);
+                    if (o > 0) dt = new Date(dt.getTime() + (1 + Math.floor(rnd() * 180)) * 60 * 1000);
+                    const isEarly = (o === 0 && u.slot === 0);
+                    const items = [];
+                    let totalQty = 0;
+                    let giftStr = '';
+                    // 主卡片/端盒单
+                    const isBoxOrder = (o === 0 && u.slot === 0 && rnd() < 0.20) || (o === 0 && rnd() < 0.08);
+                    const isBuyouOrder = (!isBoxOrder) && (o === 0 ? rnd() < 0.06 : rnd() < 0.10);
+                    if (isBoxOrder) {
+                        // 端盒：1 个端盒 + 若干补抽卡片；端盒商品本身按 375 抽计
+                        items.push('周柯宇爱意正值炽夏小卡抽抽乐-端盒[购买数量:1]');
+                        totalQty += 1;
+                        const extra = 4 + Math.floor(rnd() * 8);
+                        for (let k = 0; k < extra; k++) {
+                            const q = 1 + Math.floor(rnd() * 3);
+                            items.push(cloudDemoCardItem(rnd, '', q));
+                            totalQty += q;
+                        }
+                    } else if (isBuyouOrder) {
+                        const q = 1;
+                        items.push('【补邮转链】「周柯宇 fully unlocked」爱意正值炽夏小卡抽抽乐-' + cloudDemoCardId(rnd) + '[购买数量:' + q + ']');
+                        totalQty += q;
+                    } else {
+                        const q = (isEarly && o === 0) ? (10 + Math.floor(rnd() * 14)) : (1 + Math.floor(rnd() * 12));
+                        items.push(cloudDemoCardItem(rnd, '', q));
+                        totalQty += q;
+                        if (rnd() < 0.30) {
+                            const g = cloudDemoCardItem(rnd, '', 1 + Math.floor(rnd() * 2));
+                            items.push(g);
+                            totalQty += 1 + Math.floor(rnd() * 2);
+                        }
+                        if (rnd() < 0.22) {
+                            const g2 = cloudDemoCardItem(rnd, '', 1);
+                            items.push(g2);
+                            totalQty += 1;
+                        }
+                        // 少量单附“奖品”赠品（真实开奖落在赠品列，格式为 奖品:卡面号）
+                        if (rnd() < 0.30) {
+                            giftStr = '奖品:' + cloudDemoCardId(rnd);
+                        }
+                    }
+                    orderSeq++;
+                    const t = new Date(dt.getTime());
+                    rows.push({
+                        '订单编号': 'D' + (2026071100000 + orderSeq),
+                        '下单账号': u.wechat,
+                        '收货人/提货人手机号': u.phone,
+                        '收货人/提货人姓名': u.name,
+                        '支付时间': cloudDemoFmt(t),
+                        '订单描述': items.join(';'),
+                        '赠品': giftStr,
+                        '商品总件数': String(totalQty)
+                    });
+                }
+            });
+            // 打乱顺序，模拟多用户交错下单
+            for (let i = rows.length - 1; i > 0; i--) {
+                const j = Math.floor(rnd() * (i + 1));
+                const tmp = rows[i]; rows[i] = rows[j]; rows[j] = tmp;
+            }
+            return rows;
+        }
+
+        function cloudDemoEnsureBanner() {
+            if (cloudDemoBannerEl && document.body.contains(cloudDemoBannerEl)) return cloudDemoBannerEl;
+            const old = document.getElementById('cloudDemoBanner');
+            if (old && old.parentNode) old.parentNode.removeChild(old);
+            const b = document.createElement('div');
+            b.id = 'cloudDemoBanner';
+            b.style.cssText = 'position:sticky;top:0;left:0;right:0;z-index:9400;background:linear-gradient(90deg,#0f766e,#115e59);color:#fff;font-size:13px;padding:8px 14px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,0.15);';
+            b.innerHTML = '🧪 <b>演示模式</b>：当前为程序化生成的随机示例数据，未连接云端、不含真实用户信息。点击右上角「退出演示」或刷新页面即可返回登录页。';
+            document.body.insertBefore(b, document.body.firstChild);
+            cloudDemoBannerEl = b;
+            return b;
+        }
+
+        function cloudDemoRegen() {
+            const url = new URL(location.href);
+            url.searchParams.set('demo', '1');
+            location.href = url.toString();
+        }
+
+        function cloudExitDemo() {
+            if (window.confirm('退出演示模式？将清除本次演示数据并回到登录页。')) {
+                cloudDemoMode = false;
+                location.href = location.pathname + location.search.replace(/[?&]demo=1(&|$)/, function (m, tail) { return tail ? '?' : ''; }).replace(/^&/, '?');
+            }
+        }
+
+        // 演示入口：进入演示态 -> 程序化生成随机订单 -> 复用现有渲染链完整展示
+        async function cloudEnterDemo() {
+            cloudDemoMode = true;
+            if (cloudPillUserEl) cloudPillUserEl.textContent = '演示模式';
+            if (cloudPillStatusEl) { cloudPillStatusEl.textContent = '｜本地随机演示数据 · 未连接云端'; cloudPillStatusEl.style.color = '#7dd3fc'; }
+            if (cloudPillSourceEl) cloudPillSourceEl.textContent = ' 数据来源：演示数据（随机生成）';
+            cloudRebuildTopBar();
+            cloudDemoEnsureBanner();
+            // 隐藏“导入 Excel”等本地上传区，避免与演示数据混用
+            try {
+                document.querySelectorAll('.upload-section').forEach(function (sec) { sec.style.display = 'none'; });
+            } catch (eIgnore) {}
+            // 生成演示主订单并复用主渲染链
+            rawOrdersData = cloudGenDemoOrders();
+            const ls = document.getElementById('loadingSection');
+            if (ls) ls.classList.remove('hidden');
+            try {
+                await processData(rawOrdersData);
+                renderRawData(rawOrdersData);
+                renderCharts();
+                cardStatsPage = 1;
+                renderStatsTables();
+                filteredData = [...userData];
+                renderTable(1);
+            } finally {
+                if (ls) ls.classList.add('hidden');
+            }
+            const rs = document.getElementById('resultSection');
+            if (rs) rs.classList.remove('hidden');
+            setTimeout(function () { try { Object.values(charts).forEach(function (c) { c.resize(); }); } catch (e2) {} }, 120);
+            cloudLogPush('已进入演示模式：随机订单 ' + rawOrdersData.length + ' 行 / 演示用户 ' + userData.length + ' 人（数据为本地生成，未访问云端）', 'ok');
+            if (cloudPillStatusEl) cloudPillStatusEl.textContent = '｜演示数据已生成（' + rawOrdersData.length + ' 行）· 未连接云端';
+        }
+
         // ---------- 初始化：先登录门禁，token 有效则探测云端 ----------
         async function cloudInit() {
             cloudInjectUI();
+            if (new URLSearchParams(location.search).get('demo') === '1') {
+                // 演示模式直达：不校验登录、不访问云端
+                try {
+                    await cloudEnterDemo();
+                } catch (e) {
+                    console.error('演示模式加载失败', e);
+                    cloudStatusPill('演示模式加载失败', '#ffd6d6');
+                    cloudShowLogin('演示模式加载失败：' + ((e && e.message) ? e.message : '未知错误'));
+                }
+                return;
+            }
             const token = cloudGetToken();
             if (!token) {
                 cloudStatusPill('未登录');
