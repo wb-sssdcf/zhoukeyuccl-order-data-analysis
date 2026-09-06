@@ -6421,8 +6421,8 @@ var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
                 const orderNo = String(u.orderNos || '').split(';')[0] || '';
                 if (!held.length || !orderNo) continue;
                 // 通过组换入卡限定 SR/R 档（36 抽档规则内），避免 SSR/SSSR 高阶抽数条件干扰“通过”演示
-                let inCard = cloudDemoCardId(rnd());
-                while (inCard.indexOf('SSSR') === 0 || inCard.indexOf('SSR') === 0 || inCard.indexOf('N') === 0) { inCard = cloudDemoCardId(rnd()); }
+                let inCard = cloudDemoCardId(rnd);
+                while (inCard.indexOf('SSSR') === 0 || inCard.indexOf('SSR') === 0 || inCard.indexOf('N') === 0) { inCard = cloudDemoCardId(rnd); }
                 list.push({
                     code: mkCode(), nickname: nicks[Math.floor(rnd() * nicks.length)], name: '演示粉丝' + (i + 1),
                     phone: String(u.phone || ''), orderNo: orderNo, submitTime: mkTime(),
@@ -6442,7 +6442,7 @@ var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
                 list.push({
                     code: mkCode(), nickname: nicks[Math.floor(rnd() * nicks.length)], name: '演示粉丝' + (i + 100),
                     phone: String(u.phone || ''), orderNo: orderNo, submitTime: mkTime(),
-                    requests: [{ inCard: cloudDemoCardId(rnd()), inQty: 1, outCards: [{ card: short[Math.floor(rnd() * short.length)], qty: 6 }] }]
+                    requests: [{ inCard: cloudDemoCardId(rnd), inQty: 1, outCards: [{ card: short[Math.floor(rnd() * short.length)], qty: 6 }] }]
                 });
                 handleCount++;
             }
@@ -6453,7 +6453,7 @@ var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
                 list.push({
                     code: mkCode(), nickname: nicks[Math.floor(rnd() * nicks.length)], name: '',
                     phone: mkPhone(fakeHeads[Math.floor(rnd() * fakeHeads.length)]), orderNo: 'FZ' + (100000 + Math.floor(rnd() * 899999)), submitTime: mkTime(),
-                    requests: [{ inCard: cloudDemoCardId(rnd()), inQty: 1, outCards: [{ card: cloudDemoCardId(rnd()), qty: 6 }] }]
+                    requests: [{ inCard: cloudDemoCardId(rnd), inQty: 1, outCards: [{ card: cloudDemoCardId(rnd), qty: 6 }] }]
                 });
             }
             // 匹配演示订单用户并复用真实审核链（与导入口径一致：手机号/订单号定位，逐提交按剩余抽数核算）
@@ -6496,12 +6496,12 @@ var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
             // pass Sheet：6 条匹配成功（宣传集赞礼=随机卡面编号）
             for (let i = 0; i < 6; i++) {
                 const u = pickUser();
-                list.push({ sheet: 'pass', phone: String(u.phone || ''), orderNo: pickOrder(u), card: cloudDemoCardId(rnd()), note: '', check: '', matched: true, ambiguous: false, missingInfo: false, accounts: [], wechat: u.wechat, matchedKey: 'phone_order' });
+                list.push({ sheet: 'pass', phone: String(u.phone || ''), orderNo: pickOrder(u), card: cloudDemoCardId(rnd), note: '', check: '', matched: true, ambiguous: false, missingInfo: false, accounts: [], wechat: u.wechat, matchedKey: 'phone_order' });
             }
             // repeat Sheet：2 条匹配成功（重复填写→卡面编号+？待核实），1 条缺订单号信息需人工确认
             for (let i = 0; i < 2; i++) {
                 const u = pickUser();
-                list.push({ sheet: 'repeat', phone: String(u.phone || ''), orderNo: pickOrder(u), card: cloudDemoCardId(rnd()) + '？待核实', note: '', check: '', matched: true, ambiguous: false, missingInfo: false, accounts: [], wechat: u.wechat, matchedKey: 'phone_order' });
+                list.push({ sheet: 'repeat', phone: String(u.phone || ''), orderNo: pickOrder(u), card: cloudDemoCardId(rnd) + '？待核实', note: '', check: '', matched: true, ambiguous: false, missingInfo: false, accounts: [], wechat: u.wechat, matchedKey: 'phone_order' });
             }
             const u2 = pickUser();
             list.push({ sheet: 'repeat', phone: String(u2.phone || ''), orderNo: '', card: '', note: '', check: '', matched: true, ambiguous: false, missingInfo: true, accounts: [], wechat: '', matchedKey: '' });
