@@ -6396,14 +6396,135 @@ var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
             return rows;
         }
 
+        // 演示数据：碎卡兑换提交（结构对齐真实审核链所需，全部程序化随机合成、无真实信息；复用 auditSubmission/renderSuikaResults 渲染链）
+        function cloudGenDemoSuika() {
+            if (typeof rawOrdersData === 'undefined' || !Array.isArray(rawOrdersData) || !rawOrdersData.length) return { total: 0, pass: 0, notFound: 0, handle: 0 };
+            if (typeof suikaSubmissions === 'undefined' || !Array.isArray(suikaSubmissions)) return { total: 0, pass: 0, notFound: 0, handle: 0 };
+            suikaSubmissions.length = 0;
+            const rnd = (function () { let s = 20260713; return function () { s = (s * 1103515245 + 12345) % 2147483648; return s / 2147483648; }; })();
+            try { userCardCountsMap = buildUserCardCounts(rawOrdersData); } catch (e0) {}
+            const users = (typeof userData !== 'undefined' && Array.isArray(userData)) ? userData : [];
+            if (!users.length) return { total: 0, pass: 0, notFound: 0, handle: 0 };
+            const nicks = ['小柯爱抽卡', '柯柯奶茶三分甜', '端盒上瘾中', '攒卡预备役', '星月糖豆', '桃桃乌龙茶', '糖霜栗子糕', '追光小柚子', '白日梦想家zy', '晚风与柯'];
+            let seq = 0;
+            const mkCode = function () { seq++; return 'DK' + (1000 + ((seq * 7) % 900)); };
+            const mkTime = function () { return cloudDemoFmt(new Date(2026, 7, 1 + Math.floor(rnd() * 18), 9 + Math.floor(rnd() * 11), Math.floor(rnd() * 60), Math.floor(rnd() * 60))); };
+            const mkPhone = function (head) { return head + String(10000000 + Math.floor(rnd() * 89999999)); };
+            const list = [];
+            // 1) 通过组：随机挑选真实存在于演示订单池、总抽数>=36 且持有>=6 张同卡的用户，申报 6 张换入 R/SR（36 抽档）
+            const passCands = users.filter(function (u) { return (u.totalDraws || 0) >= 36; });
+            let passCount = 0;
+            for (let i = 0; i < passCands.length && passCount < 12; i += 2) {
+                const u = passCands[i];
+                const cm = (userCardCountsMap[u.wechat] && userCardCountsMap[u.wechat].counts) || {};
+                const held = Object.keys(cm).filter(function (k) { return cm[k] >= 6; });
+                const orderNo = String(u.orderNos || '').split(';')[0] || '';
+                if (!held.length || !orderNo) continue;
+                // 通过组换入卡限定 SR/R 档（36 抽档规则内），避免 SSR/SSSR 高阶抽数条件干扰“通过”演示
+                let inCard = cloudDemoCardId(rnd());
+                while (inCard.indexOf('SSSR') === 0 || inCard.indexOf('SSR') === 0 || inCard.indexOf('N') === 0) { inCard = cloudDemoCardId(rnd()); }
+                list.push({
+                    code: mkCode(), nickname: nicks[Math.floor(rnd() * nicks.length)], name: '演示粉丝' + (i + 1),
+                    phone: String(u.phone || ''), orderNo: orderNo, submitTime: mkTime(),
+                    requests: [{ inCard: inCard, inQty: 1, outCards: [{ card: held[Math.floor(rnd() * held.length)], qty: 6 }] }]
+                });
+                passCount++;
+            }
+            // 2) 需人工处理组：申报的换出卡数量超出实际持有（触发“数量不足”走人工复核）
+            const handleCands = users.filter(function (u) { return (u.totalDraws || 0) >= 36; });
+            let handleCount = 0;
+            for (let i = 1; i < handleCands.length && handleCount < 3; i += 3) {
+                const u = handleCands[i];
+                const cm = (userCardCountsMap[u.wechat] && userCardCountsMap[u.wechat].counts) || {};
+                const short = Object.keys(cm).filter(function (k) { const q = cm[k]; return q >= 1 && q < 6; });
+                const orderNo = String(u.orderNos || '').split(';')[0] || '';
+                if (!short.length || !orderNo) continue;
+                list.push({
+                    code: mkCode(), nickname: nicks[Math.floor(rnd() * nicks.length)], name: '演示粉丝' + (i + 100),
+                    phone: String(u.phone || ''), orderNo: orderNo, submitTime: mkTime(),
+                    requests: [{ inCard: cloudDemoCardId(rnd()), inQty: 1, outCards: [{ card: short[Math.floor(rnd() * short.length)], qty: 6 }] }]
+                });
+                handleCount++;
+            }
+            // 3) 未找到用户组：手机号取演示订单池外号段（135-138），订单号伪造，必不命中真实匹配
+            const fakeHeads = ['135', '136', '137', '138'];
+            const fakeCount = 2 + Math.floor(rnd() * 2);
+            for (let i = 0; i < fakeCount; i++) {
+                list.push({
+                    code: mkCode(), nickname: nicks[Math.floor(rnd() * nicks.length)], name: '',
+                    phone: mkPhone(fakeHeads[Math.floor(rnd() * fakeHeads.length)]), orderNo: 'FZ' + (100000 + Math.floor(rnd() * 899999)), submitTime: mkTime(),
+                    requests: [{ inCard: cloudDemoCardId(rnd()), inQty: 1, outCards: [{ card: cloudDemoCardId(rnd()), qty: 6 }] }]
+                });
+            }
+            // 匹配演示订单用户并复用真实审核链（与导入口径一致：手机号/订单号定位，逐提交按剩余抽数核算）
+            list.forEach(function (s) {
+                try {
+                    const matched = findUserByPhoneOrderDetail(s.phone, s.orderNo, s.nickname, s.name, {});
+                    s.user = matched.user; s.userMatch = matched;
+                } catch (e3) { s.user = null; s.userMatch = null; }
+                s.audit = auditSubmission(s, s.user ? Math.max(0, s.user.totalDraws || 0) : undefined);
+            });
+            suikaSubmissions = list;
+            suikaAuditMap = {};
+            suikaSubmissions.forEach(function (s) {
+                if (s.user) {
+                    if (!suikaAuditMap[s.user.wechat]) suikaAuditMap[s.user.wechat] = [];
+                    suikaAuditMap[s.user.wechat].push(s);
+                }
+            });
+            renderSuikaResults();
+            const st = { pass: 0, notFound: 0, handle: 0 };
+            suikaSubmissions.forEach(function (s) {
+                if (!s.audit) return;
+                if (s.audit.status === '通过') st.pass++;
+                else if (s.audit.status === '未找到用户') st.notFound++;
+                else st.handle++;
+            });
+            return { total: suikaSubmissions.length, pass: st.pass, notFound: st.notFound, handle: st.handle };
+        }
+
+        // 演示数据：集赞兑换/宣传集赞礼（结构对齐 jizanExportData，全部程序化随机合成；复用 replayJizanGiftToUsers/renderJizanSummary 渲染链）
+        function cloudGenDemoJizan() {
+            if (typeof jizanExportData === 'undefined') return { total: 0 };
+            jizanExportData = [];
+            const rnd = (function () { let s = 20260714; return function () { s = (s * 1103515245 + 12345) % 2147483648; return s / 2147483648; }; })();
+            const users = (typeof userData !== 'undefined' && Array.isArray(userData)) ? userData : [];
+            if (!users.length) return { total: 0 };
+            const pickUser = function () { return users[Math.floor(rnd() * users.length)]; };
+            const pickOrder = function (u) { const arr = String(u.orderNos || '').split(';').filter(Boolean); return arr.length ? arr[Math.floor(rnd() * arr.length)] : ''; };
+            const list = [];
+            // pass Sheet：6 条匹配成功（宣传集赞礼=随机卡面编号）
+            for (let i = 0; i < 6; i++) {
+                const u = pickUser();
+                list.push({ sheet: 'pass', phone: String(u.phone || ''), orderNo: pickOrder(u), card: cloudDemoCardId(rnd()), note: '', check: '', matched: true, ambiguous: false, missingInfo: false, accounts: [], wechat: u.wechat, matchedKey: 'phone_order' });
+            }
+            // repeat Sheet：2 条匹配成功（重复填写→卡面编号+？待核实），1 条缺订单号信息需人工确认
+            for (let i = 0; i < 2; i++) {
+                const u = pickUser();
+                list.push({ sheet: 'repeat', phone: String(u.phone || ''), orderNo: pickOrder(u), card: cloudDemoCardId(rnd()) + '？待核实', note: '', check: '', matched: true, ambiguous: false, missingInfo: false, accounts: [], wechat: u.wechat, matchedKey: 'phone_order' });
+            }
+            const u2 = pickUser();
+            list.push({ sheet: 'repeat', phone: String(u2.phone || ''), orderNo: '', card: '', note: '', check: '', matched: true, ambiguous: false, missingInfo: true, accounts: [], wechat: '', matchedKey: '' });
+            // fail Sheet：1 条匹配失败（异常，请联系客服）
+            const u3 = pickUser();
+            list.push({ sheet: 'fail', phone: '136' + String(10000000 + Math.floor(rnd() * 89999999)), orderNo: 'FZ' + (100000 + Math.floor(rnd() * 899999)), card: '', note: '', check: '', matched: false, ambiguous: false, missingInfo: false, accounts: [], wechat: '', matchedKey: '' });
+            jizanExportData = list;
+            try { if (typeof replayJizanGiftToUsers === 'function') replayJizanGiftToUsers(); } catch (e5) {}
+            try {
+                if (typeof renderJizanSummary === 'function' && typeof buildJizanSummaryFromExport === 'function') renderJizanSummary(buildJizanSummaryFromExport(), true);
+            } catch (e6) {}
+            return { total: jizanExportData.length };
+        }
+
         function cloudDemoEnsureBanner() {
             if (cloudDemoBannerEl && document.body.contains(cloudDemoBannerEl)) return cloudDemoBannerEl;
             const old = document.getElementById('cloudDemoBanner');
             if (old && old.parentNode) old.parentNode.removeChild(old);
             const b = document.createElement('div');
             b.id = 'cloudDemoBanner';
-            b.style.cssText = 'position:sticky;top:0;left:0;right:0;z-index:9400;background:linear-gradient(90deg,#0f766e,#115e59);color:#fff;font-size:13px;padding:8px 14px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,0.15);';
-            b.innerHTML = '🧪 <b>演示模式</b>：当前为程序化生成的随机示例数据，未连接云端、不含真实用户信息。点击右上角「退出演示」或刷新页面即可返回登录页。';
+            b.style.cssText = 'position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:8500;pointer-events:none;background:linear-gradient(90deg,#0f766e,#115e59);color:#fff;font-size:12px;padding:5px 14px;border-radius:999px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,0.18);max-width:90vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+            b.title = '演示模式：当前为程序化生成的随机示例数据，未连接云端、不含真实用户信息。点击右上角「退出演示」或刷新页面即可返回登录页。';
+            b.innerHTML = '🧪 <b>演示模式</b>：随机示例数据 · 未连接云端 · 点击右上角「退出演示」返回';
             document.body.insertBefore(b, document.body.firstChild);
             cloudDemoBannerEl = b;
             return b;
@@ -6451,9 +6572,23 @@ var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
             }
             const rs = document.getElementById('resultSection');
             if (rs) rs.classList.remove('hidden');
+            // 演示数据：碎卡兑换 + 集赞/宣传礼（纯程序化随机合成，复用现有审核与渲染链）
+            let suikaStat = { total: 0, pass: 0, notFound: 0, handle: 0 };
+            let jizanStat = { total: 0 };
+            try {
+                suikaStat = cloudGenDemoSuika();
+                const sr = document.getElementById('suikaResultSection');
+                if (sr) sr.classList.remove('hidden');
+            } catch (eSuika) { console.error('演示碎卡数据生成失败', eSuika); }
+            try {
+                jizanStat = cloudGenDemoJizan();
+                const jr = document.getElementById('jizanResultSection');
+                if (jr) jr.classList.remove('hidden');
+                try { filteredData = [...userData]; renderTable(1); } catch (eTbl) {}
+            } catch (eJizan) { console.error('演示集赞数据生成失败', eJizan); }
             setTimeout(function () { try { Object.values(charts).forEach(function (c) { c.resize(); }); } catch (e2) {} }, 120);
-            cloudLogPush('已进入演示模式：随机订单 ' + rawOrdersData.length + ' 行 / 演示用户 ' + userData.length + ' 人（数据为本地生成，未访问云端）', 'ok');
-            if (cloudPillStatusEl) cloudPillStatusEl.textContent = '｜演示数据已生成（' + rawOrdersData.length + ' 行）· 未连接云端';
+            cloudLogPush('已进入演示模式：随机订单 ' + rawOrdersData.length + ' 行 / 演示用户 ' + userData.length + ' 人，碎卡提交 ' + suikaStat.total + ' 条（通过 ' + suikaStat.pass + '/待人工 ' + suikaStat.handle + '/未找到 ' + suikaStat.notFound + '），集赞记录 ' + jizanStat.total + ' 条（数据为本地生成，未访问云端）', 'ok');
+            if (cloudPillStatusEl) cloudPillStatusEl.textContent = '｜演示数据已生成（订单 ' + rawOrdersData.length + ' 行 · 碎卡 ' + suikaStat.total + ' · 集赞 ' + jizanStat.total + '）· 未连接云端';
         }
 
         // ---------- 初始化：先登录门禁，token 有效则探测云端 ----------
