@@ -488,6 +488,90 @@
     </div>
 
     <script>
+        // ===== 全局错误提示 + 数据安全兜底（2026-09-07 体检修复）=====
+        (function () {
+            var toastEl = null;
+            function ensureToast() {
+                if (toastEl && document.body.contains(toastEl)) return toastEl;
+                toastEl = document.createElement('div');
+                toastEl.style.cssText = 'position:fixed;top:22px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#20517d,#4f84b8);color:#fff;padding:11px 20px;border-radius:8px;font-size:14px;z-index:99999;box-shadow:0 6px 20px rgba(0,0,0,.28);opacity:0;transition:opacity .3s;pointer-events:none;max-width:86%;text-align:center;line-height:1.5;';
+                document.body.appendChild(toastEl);
+                return toastEl;
+            }
+            function showToastMsg(msg) {
+                var el = ensureToast();
+                el.textContent = msg;
+                el.style.opacity = '1';
+                clearTimeout(el._t);
+                el._t = setTimeout(function () { el.style.opacity = '0'; }, 5000);
+            }
+            window.addEventListener('error', function (e) {
+                try { showToastMsg('页面出现错误：' + ((e && e.message) || '未知错误') + (e && e.lineno ? '（行 ' + e.lineno + '）' : '')); } catch (_) {}
+            });
+            window.addEventListener('unhandledrejection', function (e) {
+                try { var r = e && e.reason; showToastMsg('操作未完成：' + ((r && r.message) || '未知错误')); } catch (_) {}
+            });
+            // ---- 原文件自动备份兜底 ----
+            var B = window.__marvisBackup = { pending: [], noticeEl: null, doneOnce: {} };
+            function tsSuffix() { var d = new Date(); var p = function (n) { return (n < 10 ? '0' : '') + n; }; return '' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '_' + p(d.getHours()) + p(d.getMinutes()); }
+            function enqueueBackup(item) {
+                if (!item || !item.name) return;
+                var isFile = (typeof Blob !== 'undefined' && item instanceof Blob);
+                if (isFile) { if (!/\.(xlsx|xls|csv)$/i.test(item.name)) return; }
+                else { if (!/\.(xlsx|xls)$/i.test(item.name)) return; }  // fileDataList 内 CSV 已解码，不做字节备份
+                if (B.doneOnce[item.name] || B.pending.some(function (x) { return x.name === item.name; })) return;
+                B.pending.push({ name: item.name, src: item });
+            }
+            function downloadOne(it) {
+                var blob;
+                if (it.src instanceof Blob) { blob = it.src; }
+                else if (it.src && it.src.data instanceof Uint8Array) { blob = new Blob([it.src.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }); }
+                else if (it.src && it.src.data !== undefined) { blob = new Blob([it.src.data]); }
+                else { return false; }
+                var url = URL.createObjectURL(blob);
+                var a = document.createElement('a');
+                a.href = url;
+                a.download = '备份_' + it.name.replace(/\.(xlsx|xls|csv)$/i, '') + '_' + tsSuffix() + (function (n) { var m = /\.(xlsx|xls|csv)$/i.exec(n); return m ? m[0].toLowerCase() : '.xlsx'; })(it.name);
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
+                return true;
+            }
+            function showBackupNotice(msg, retryItems) {
+                var old = B.noticeEl;
+                if (old && old.parentNode) old.parentNode.removeChild(old);
+                var box = document.createElement('div');
+                box.style.cssText = 'position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:linear-gradient(135deg,#20517d,#4f84b8);color:#fff;padding:12px 18px;border-radius:8px;font-size:14px;z-index:99998;box-shadow:0 6px 20px rgba(0,0,0,.3);max-width:88%;display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:center;line-height:1.5;';
+                var span = document.createElement('span');
+                span.textContent = msg;
+                box.appendChild(span);
+                if (retryItems && retryItems.length > 0) {
+                    var btn = document.createElement('button');
+                    btn.textContent = '重新下载备份(' + retryItems.length + ')';
+                    btn.style.cssText = 'background:#fff;color:#20517d;border:none;border-radius:6px;padding:6px 14px;font-size:13px;font-weight:700;cursor:pointer;';
+                    btn.addEventListener('click', function () { flushBackup(true); });
+                    box.appendChild(btn);
+                } else {
+                    clearTimeout(box._t);
+                    box._t = setTimeout(function () { if (box.parentNode) box.parentNode.removeChild(box); }, 8000);
+                }
+                document.body.appendChild(box);
+                B.noticeEl = box;
+            }
+            function flushBackup() {
+                var pend = B.pending;
+                if (pend.length === 0) return;
+                var ok = 0, fail = [];
+                for (var i = 0; i < pend.length; i++) { if (downloadOne(pend[i])) { ok++; B.doneOnce[pend[i].name] = 1; } else fail.push(pend[i]); }
+                var total = pend.length;
+                B.pending = fail;
+                if (fail.length === 0) { showBackupNotice('已自动下载备份，请妥善保存（共 ' + total + ' 个文件）', null); }
+                else { showBackupNotice('已自动下载备份，请妥善保存（成功 ' + ok + ' / ' + total + '，部分可能被浏览器拦截）', fail); }
+            }
+            window.__marvisEnqueueBackup = enqueueBackup;
+            window.__marvisFlushBackup = flushBackup;
+        })();
         const ACTIVITY_START = new Date('2026-07-11T17:20:00');
         // 第一小时截止时间增加5分钟缓冲（18:25），考虑支付延迟
         const ACTIVITY_1H_END = new Date(ACTIVITY_START.getTime() + 65 * 60 * 1000);
@@ -536,7 +620,6 @@
                 // 检查是否已存在相同文件名的文件（去重）
                 const exists = fileDataList.some(f => f.name === file.name);
                 if (exists) {
-                    console.log(`文件已存在，跳过: ${file.name}`);
                     return;
                 }
                 
@@ -611,18 +694,16 @@
                         // Excel文件解析
                         const workbook = XLSX.read(fileDataList[i].data, { type: 'array' });
                         df = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                        window.__marvisEnqueueBackup(fileDataList[i]); // 解析成功即排队原文件备份
                     }
                     
                     // 调试：显示前两行数据的列名
                     if (df.length > 0 && i === 0) {
-                        console.log('=== 数据预览（前两行）===');
-                        console.log('列名:', Object.keys(df[0]));
-                        console.log('第一行:', df[0]);
-                        if (df.length > 1) console.log('第二行:', df[1]);
                     }
                     
                     allData = allData.concat(df);
                 }
+                window.__marvisFlushBackup();
                 
                 rawOrdersData = allData;
                 await processData(allData);
@@ -662,10 +743,6 @@
                 <tr>${displayHeaders.map(h => `<td>${row[h] !== undefined ? String(row[h]).substring(0, 30) : ''}</td>`).join('')}</tr>
             `).join('');
             
-            console.log('=== 所有列名 ===');
-            console.log(headers);
-            console.log('=== 前3行数据 ===');
-            console.log(previewRows);
         }
 
         function getCardType(cardName) {
@@ -2849,6 +2926,7 @@
                 } else {
                     wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
                 }
+                window.__marvisEnqueueBackup(suikaFile); window.__marvisFlushBackup(); // 解析成功即自动备份原文件
                 // 重导前先保留本地已有的人工处理记录，供下方按 code 贴回，避免覆盖洗白
                 const suikaPrevSubmissions = Array.isArray(suikaSubmissions) ? suikaSubmissions.slice() : [];
                 suikaSubmissions = groupSuikaRowsFromWb(wb);
@@ -4702,6 +4780,7 @@
                 } else {
                     wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
                 }
+                window.__marvisEnqueueBackup(jizanFile); window.__marvisFlushBackup(); // 解析成功即自动备份原文件
                 const jizanPrevData = (typeof jizanExportData !== 'undefined' && Array.isArray(jizanExportData)) ? jizanExportData.slice() : [];
                 const parsed = parseJizanWorkbook(wb);
                 applyJizan(parsed);
